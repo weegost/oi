@@ -1,0 +1,23 @@
+# 金鑰與本機設定（.env.example 要上傳，.env 不可以）
+.env
+.env.*
+!.env.example
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# 系統與編輯器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

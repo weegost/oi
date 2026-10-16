@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/* 設計系統（ui-ux-pro-max：Minimalism & Swiss，B2B 專業信任感）
+   主色：深藍灰文字＋單一信任藍強調色（#0369A1），避免 AI 常見的紫粉漸層 */
+@theme inline {
+  --font-sans: var(--font-jakarta), var(--font-noto-tc), "Microsoft JhengHei", "PingFang TC", sans-serif;
+  --font-mono: var(--font-geist-mono);
+}
+
+@theme {
+  --color-brand-50: #f0f9ff;
+  --color-brand-100: #e0f2fe;
+  --color-brand-200: #bae6fd;
+  --color-brand-300: #7dd3fc;
+  --color-brand-400: #38bdf8;
+  --color-brand-500: #0284c7;
+  --color-brand-600: #0369a1;
+  --color-brand-700: #075985;
+  --color-brand-800: #0c4a6e;
+  --color-brand-900: #082f49;
+}
+
+/* 報告現場多用投影，固定淺色介面確保對比 */
+body {
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: var(--font-sans);
+}
+
+/* 可點擊元素一律顯示手指游標（Tailwind v4 預設不加） */
+button:not(:disabled),
+[role="button"],
+summary,
+select,
+label:has(input[type="checkbox"]) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* 鍵盤操作時清楚的焦點框 */
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+/* 互動回饋：顏色變化 150ms，不做大幅位移 */
+a,
+button,
+input,
+textarea,
+select {
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}
+
+/* 列印／存成 PDF：白底、A4 邊界 */
+@media print {
+  body {
+    background: #fff;
+  }
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+}

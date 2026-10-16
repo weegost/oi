@@ -1,0 +1,198 @@
+=====================================================
+  智行進業 BizPilot AI —— 開啟說明書（Windows）
+=====================================================
+
+這份說明教你從零開始，在自己的電腦上把系統跑起來。
+第一次設定約 30 分鐘，之後每次開啟約 1 分鐘。
+
+以下指令都在「PowerShell」輸入（開始選單搜尋 PowerShell）。
+一行指令打完按 Enter，等它跑完再打下一行。
+
+
+-----------------------------------------------------
+一、先安裝這四個軟體（只要裝一次）
+-----------------------------------------------------
+
+1. Git
+   https://git-scm.com/download/win
+   安裝時一路按「Next」即可。
+
+2. Docker Desktop（用來跑資料庫）
+   https://www.docker.com/products/docker-desktop
+   選「Download for Windows – AMD64」。
+   安裝後如果出現「WSL not installed」：
+     (1) 開始選單搜尋 PowerShell → 按右鍵「以系統管理員身分執行」
+     (2) 輸入：wsl --install --no-distribution
+     (3) 跑完後重新開機
+   重開後打開 Docker Desktop，左下角顯示綠色 Engine running 就好了。
+   （要你登入時可以按 Skip 跳過）
+
+3. Node.js（前端網頁用）
+   https://nodejs.org
+   下載標示「LTS」的版本，一路按「Next」。
+
+4. Python 3.12（後端用）
+   https://www.python.org/downloads/
+   ★ 安裝第一個畫面要勾選「Add python.exe to PATH」再按 Install。
+
+裝完後把 PowerShell 關掉重開，輸入下面三行確認都有版本號出現：
+   git --version
+   node -v
+   python --version
+
+
+-----------------------------------------------------
+二、下載專案（只要做一次）
+-----------------------------------------------------
+
+1. 切到桌面：
+   cd $HOME\Desktop
+
+2. 下載專案（會在桌面產生 Senior-Project 資料夾）：
+   git clone https://github.com/wubo12342/Senior-Project.git
+
+3. 進到資料夾，切換到有程式的分支：
+   cd Senior-Project
+   git switch 1111134029
+
+   ※ 如果分支已經合併進 main，第 3 步的 git switch 可以省略。
+
+
+-----------------------------------------------------
+三、第一次設定（只要做一次）
+-----------------------------------------------------
+
+以下都在 Senior-Project 資料夾裡執行。
+
+1. 建立設定檔：
+   copy .env.example .env
+
+2. 填入 Gemini 金鑰（沒有金鑰也能看示範，可先跳過，見第六節）：
+   (1) 用個人 Gmail 登入 https://aistudio.google.com
+   (2) 左側點「Get API key」→「Create API key」→ 複製
+   (3) 用記事本打開 .env：
+         notepad .env
+   (4) 找到 GEMINI_API_KEY= 這一行，把金鑰貼在等號後面，存檔
+       例如：GEMINI_API_KEY=AIza......
+   ★ 金鑰是你自己的，不要貼到群組，也不要上傳 GitHub。
+
+3. 啟動資料庫（Docker Desktop 要先打開）：
+   docker compose up -d
+
+4. 安裝後端套件（約 3–5 分鐘）：
+   cd backend
+   python -m venv .venv
+   .venv\Scripts\python -m pip install -r requirements.txt
+   cd ..
+
+5. 安裝前端套件（約 2–3 分鐘）：
+   cd frontend
+   npm install
+   cd ..
+
+
+-----------------------------------------------------
+四、每次要開系統時
+-----------------------------------------------------
+
+0. 先打開 Docker Desktop，等左下角顯示 Engine running。
+
+1. 開第一個 PowerShell，啟動資料庫：
+   cd $HOME\Desktop\Senior-Project
+   docker compose up -d
+
+2. 同一個視窗接著啟動後端（這個視窗不要關）：
+   cd backend
+   .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+
+   看到「Application startup complete」就代表好了。
+
+3. 再開第二個 PowerShell，啟動前端（這個視窗也不要關）：
+   cd $HOME\Desktop\Senior-Project\frontend
+   npm run dev
+
+   看到「Ready」就代表好了。
+
+4. 用瀏覽器（建議 Chrome 或 Edge）打開：
+   http://localhost:3000
+
+   想確認後端、資料庫、Gemini 有沒有接上，可以打開：
+   http://localhost:3000/status
+
+
+-----------------------------------------------------
+五、怎麼示範
+-----------------------------------------------------
+
+1. 首頁點「使用示範案例「小名 3C 網店」」。
+2. 往下會看到兩個按鈕：
+   ‧ 載入示範流程：從第一階段開始，可以現場示範 AI 引導追問。
+   ‧ 載入完整示範（四階段）：四個階段都已完成，約 1 秒載入，
+     不需要等 AI，適合報告時使用或當備案。
+3. 上方的 1～4 階段可以直接點擊切換。
+4. 第四階段可以下載 Word、Markdown，或列印成 PDF。
+
+想查真實企業：首頁輸入 8 碼統一編號後按「查詢企業資料」。
+
+
+-----------------------------------------------------
+六、沒有 Gemini 金鑰能做什麼
+-----------------------------------------------------
+
+不需要金鑰：
+  ‧ 統編查詢企業資料
+  ‧ 載入完整示範，看完四個階段
+  ‧ 示範案例的 AI 介入分析（使用預存結果）
+  ‧ 編輯流程圖、情境沙盒測試、下載需求草案
+
+需要金鑰：
+  ‧ 第一階段的 AI 對話（直接描述／AI 引導）
+  ‧ 分析非示範案例的步驟
+  ‧ 請 AI 撰寫摘要
+
+沒有金鑰時按到這些功能，畫面會提示「尚未設定 GEMINI_API_KEY」，不會當掉。
+
+
+-----------------------------------------------------
+七、關閉系統
+-----------------------------------------------------
+
+1. 在兩個 PowerShell 視窗各按 Ctrl + C，再關掉視窗。
+2. 資料庫可以不用關；要關的話輸入：
+   docker compose stop
+   （資料會保留，下次 docker compose up -d 就回來）
+
+
+-----------------------------------------------------
+八、常見問題
+-----------------------------------------------------
+
+Q：網頁出現「無法連線到後端」？
+A：後端那個 PowerShell 視窗被關掉了，照第四節第 2 步重新啟動。
+
+Q：電腦重開機後打不開？
+A：要先打開 Docker Desktop，再照第四節從頭開一次。
+
+Q：docker compose up -d 出現錯誤？
+A：確認 Docker Desktop 已經打開，而且左下角是綠色的 Engine running。
+
+Q：改了後端程式沒有生效？
+A：在後端視窗按 Ctrl + C，再執行一次啟動指令。
+
+Q：AI 回應很慢或顯示暫時無法回應？
+A：Gemini 免費版偶爾忙碌，系統會自動改用備用模型，等一下再試即可。
+   報告時建議用「載入完整示範」，完全不需要 AI。
+
+Q：python 或 npm 顯示「不是內部或外部命令」？
+A：安裝時沒有加入 PATH。重新安裝 Python 並勾選「Add python.exe to PATH」，
+   裝完要把 PowerShell 關掉重開。
+
+Q：npm install 出現一堆 warning？
+A：只要最後沒有出現 ERR!，warning 可以忽略。
+
+Q：PowerShell 說「已停用指令碼執行」？
+A：以系統管理員身分開 PowerShell，輸入下面這行後按 Y：
+   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+
+更多技術細節請看專案裡的 README.md。
