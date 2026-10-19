@@ -11,3 +11,5 @@ langgraph==1.2.15
 langchain-google-genai==4.4.2
 pytest
 python-docx==1.2.0
+pypdf==6.21.1
+python-multipart==0.0.32

@@ -110,6 +110,7 @@ export default function ReportWorkspace() {
             <Row label="想改善的工作" value={o.work} />
             <Row label="目前問題" value={o.problem} />
             <Row label="分析範圍" value={o.scope} />
+            {o.documents.length > 0 && <Row label="參考的企業文件" value={o.documents.join("、")} />}
           </dl>
         </Section>
 

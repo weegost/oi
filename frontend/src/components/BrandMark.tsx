@@ -1,10 +1,10 @@
 import { Workflow } from "lucide-react";
 
-/** 品牌標誌：深藍底白色流程圖示＋中英文名稱 */
+/** 品牌標誌：赤陶橘底白色流程圖示＋中英文名稱 */
 export default function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white">
+      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
         <Workflow aria-hidden className="h-4.5 w-4.5" />
       </span>
       <span className="leading-tight">

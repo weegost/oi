@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { Store } from "lucide-react";
 import BrandMark from "@/components/BrandMark";
 import CompanyCard from "@/components/CompanyCard";
 import ProjectForm from "@/components/ProjectForm";
+import SectionTitle from "@/components/SectionTitle";
 import StageNav from "@/components/StageNav";
+import ThemeToggle from "@/components/ThemeToggle";
 import { apiGet } from "@/lib/api";
 import type { Company } from "@/lib/types";
 
@@ -36,9 +39,12 @@ export default function Home() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
-      <header>
-        <BrandMark />
-        <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900">中小企業 AI 導入探索</h1>
+      <header className="rounded-3xl border border-brand-100 bg-brand-50 p-6 sm:p-8">
+        <div className="flex items-center justify-between">
+          <BrandMark />
+          <ThemeToggle />
+        </div>
+        <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">中小企業 AI 導入探索</h1>
         <p className="mt-2 max-w-2xl text-slate-600">
           從目前實際的工作流程出發，找出 AI 能協助的步驟、需要保留人工判斷的地方，以及導入前要先準備的條件。
         </p>
@@ -47,8 +53,8 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
-        <h2 className="text-lg font-semibold">建立企業背景</h2>
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+        <SectionTitle icon={Store}>建立企業背景</SectionTitle>
         <p className="mt-1 text-sm text-slate-500">
           輸入統一編號，系統會串接經濟部商工行政資料開放平臺，帶入登記資料與營業項目。
         </p>

@@ -18,35 +18,35 @@ def _node(id, kind, title, x, y, **fields):
 
 DEMO_FLOW = {
     "nodes": [
-        _node("start", "start", "收到退貨訊息", 250, 0),
+        _node("start", "start", "收到退貨訊息", None, None),
         _node(
-            "receive", "process", "接收客戶需求", 200, 110,
+            "receive", "process", "接收客戶需求", None, None,
             role="客服專員", system="蝦皮聊聊",
             data="客戶姓名、訂單編號、商品照片、問題描述",
             exceptions="客戶未附訂單編號或商品照片時，先請客戶補充。",
             output="退貨申請與待補資料清單",
         ),
         _node(
-            "lookup", "process", "查詢訂單資料", 200, 250,
+            "lookup", "process", "查詢訂單資料", None, None,
             role="客服專員", system="蝦皮賣家中心",
             data="訂單狀態、付款方式、出貨日期、商品資訊",
             exceptions="查無訂單或商品資訊不一致時，交由人工處理。",
             output="訂單查詢摘要",
         ),
         _node(
-            "decision", "decision", "是否符合退款條件？", 200, 390,
+            "decision", "decision", "是否符合退款條件？", None, None,
             role="客服主管", system="退貨政策文件",
             data="訂單日期、商品狀態、退款原因",
             condition="訂單在七天內且商品未使用",
             output="退貨條件檢查結果",
         ),
         _node(
-            "notify", "process", "通知客戶處理結果", 200, 540,
+            "notify", "process", "通知客戶處理結果", None, None,
             role="客服專員", system="蝦皮聊聊",
             data="退款結果、處理說明、客服訊息範本",
             output="給客戶的回覆",
         ),
-        _node("end", "end", "完成處理", 250, 680),
+        _node("end", "end", "完成處理", None, None),
     ],
     "edges": [
         {"source": "start", "target": "receive", "label": ""},

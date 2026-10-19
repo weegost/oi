@@ -2,14 +2,17 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FileText, LayoutGrid, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
+import DocumentsDrawer from "@/components/docs/DocumentsDrawer";
 import ChatPanel, { type Mode } from "@/components/flow/ChatPanel";
 import DetailPanel from "@/components/flow/DetailPanel";
 import FlowCanvas, { type Selection } from "@/components/flow/FlowCanvas";
+import GapHint from "@/components/flow/GapHint";
 import ProjectHeader from "@/components/ProjectHeader";
 import { apiGet, apiSend } from "@/lib/api";
 import { findGaps } from "@/lib/gaps";
 import { autoLayout, ensureLayout } from "@/lib/layout";
-import type { Flow, FlowNode, Project } from "@/lib/types";
+import type { CompanyDocument, Flow, FlowNode, Project } from "@/lib/types";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 
@@ -23,6 +26,10 @@ export default function ProjectWorkspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>("saved");
+  const [chatOpen, setChatOpen] = useState(true);
+  const [fitKey, setFitKey] = useState(0);
+  const [docs, setDocs] = useState<CompanyDocument[]>([]);
+  const [docsOpen, setDocsOpen] = useState(false);
   // 版本號：每次本地編輯 +1，用來判斷自動儲存期間是否又有新的編輯
   const edits = useRef(0);
 
@@ -56,6 +63,14 @@ export default function ProjectWorkspace() {
   useEffect(() => {
     apiGet<Project>(`/api/projects/${id}`).then(applyServer).catch((e) => setError(e.message));
   }, [id, applyServer]);
+
+  const taxId = project?.tax_id;
+  useEffect(() => {
+    if (!taxId) return;
+    apiGet<CompanyDocument[]>(`/api/companies/${taxId}/documents`)
+      .then(setDocs)
+      .catch(() => {}); // 文件清單載入失敗不影響流程建模
+  }, [taxId]);
 
   // 編輯後 1 秒自動儲存
   useEffect(() => {
@@ -131,15 +146,38 @@ export default function ProjectWorkspace() {
       <ProjectHeader project={project} stage={0} />
 
       <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 text-sm">
-        <button onClick={addNode} className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50">
-          ＋ 新增步驟
+        <button
+          onClick={() => {
+            setChatOpen(!chatOpen);
+            setFitKey((k) => k + 1); // 畫布寬度改變後重新縮放
+          }}
+          aria-label={chatOpen ? "收合對話" : "展開對話"}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1 hover:bg-slate-50"
+        >
+          {chatOpen ? <PanelLeftClose aria-hidden className="h-4 w-4" /> : <PanelLeftOpen aria-hidden className="h-4 w-4" />}
+          {chatOpen ? "收合對話" : "展開對話"}
+        </button>
+        <button onClick={addNode} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50">
+          <Plus aria-hidden className="h-4 w-4" />
+          新增步驟
         </button>
         <button
-          onClick={() => edit(autoLayout(flow))}
+          onClick={() => {
+            edit(autoLayout(flow));
+            setFitKey((k) => k + 1);
+          }}
           disabled={!flow.nodes.length}
-          className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50 disabled:opacity-50"
         >
+          <LayoutGrid aria-hidden className="h-4 w-4" />
           自動排列
+        </button>
+        <button
+          onClick={() => setDocsOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50"
+        >
+          <FileText aria-hidden className="h-4 w-4" />
+          企業文件（{docs.length}）
         </button>
         <span className="ml-2 text-slate-500">
           已確認 {confirmed}/{tasks} 步 · 待補 {gaps.length} 項
@@ -162,27 +200,55 @@ export default function ProjectWorkspace() {
       {error && <p className="bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside className="h-80 shrink-0 border-b border-slate-200 bg-white lg:h-auto lg:w-80 lg:border-r lg:border-b-0">
-          <ChatPanel
-            messages={project.messages}
-            mode={mode}
-            busy={busy}
-            onModeChange={switchMode}
-            onSend={(text) => chat(mode, text)}
-          />
-        </aside>
+        {chatOpen && (
+          <aside className="h-80 shrink-0 border-b border-slate-200 bg-white lg:h-auto lg:w-80 lg:border-r lg:border-b-0">
+            <ChatPanel
+              messages={project.messages}
+              mode={mode}
+              busy={busy}
+              onModeChange={switchMode}
+              onSend={(text) => chat(mode, text)}
+            />
+          </aside>
+        )}
         <section className="relative min-h-[420px] flex-1 bg-slate-50">
-          {flow.nodes.length === 0 && (
+          {flow.nodes.length === 0 ? (
             <p className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6 text-center text-slate-400">
               在左側描述工作，流程圖會出現在這裡
             </p>
+          ) : (
+            !selection && <GapHint gaps={gaps} onSelect={setSelection} />
           )}
-          <FlowCanvas flow={flow} gaps={gaps} selection={selection} onChange={edit} onSelect={setSelection} />
+          <FlowCanvas
+            flow={flow}
+            gaps={gaps}
+            selection={selection}
+            onChange={edit}
+            onSelect={setSelection}
+            fitKey={fitKey}
+          />
+          {/* 選了步驟或連線才浮出編輯面板，不常駐占用畫布寬度 */}
+          {selection && (
+            <aside className="absolute top-3 right-3 bottom-3 z-10 flex w-80 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+              <div className="flex justify-end border-b border-slate-100 px-2 py-1">
+                <button
+                  onClick={() => setSelection(null)}
+                  aria-label="關閉編輯面板"
+                  className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <X aria-hidden className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <DetailPanel flow={flow} gaps={gaps} selection={selection} onChange={edit} onSelect={setSelection} />
+              </div>
+            </aside>
+          )}
         </section>
-        <aside className="shrink-0 overflow-y-auto border-t border-slate-200 bg-white lg:w-80 lg:border-t-0 lg:border-l">
-          <DetailPanel flow={flow} gaps={gaps} selection={selection} onChange={edit} onSelect={setSelection} />
-        </aside>
       </div>
+      {docsOpen && (
+        <DocumentsDrawer taxId={project.tax_id} docs={docs} onChange={setDocs} onClose={() => setDocsOpen(false)} />
+      )}
     </main>
   );
 }

@@ -40,36 +40,7 @@ type Props = {
 };
 
 export default function DetailPanel({ flow, gaps, selection, onChange, onSelect }: Props) {
-  if (!selection) {
-    const overall = gaps.filter((g) => !g.node_id);
-    return (
-      <div className="p-4 text-sm text-slate-600">
-        <p>點選流程圖上的步驟或連線即可編輯。</p>
-        <p className="mt-2">拖曳步驟下方的圓點到另一個步驟，可以新增連線；選取後按 Delete 可刪除。</p>
-        {gaps.length > 0 && (
-          <div className="mt-4 rounded-lg bg-amber-50 p-3 text-amber-900">
-            <p className="font-medium">尚待補充 {gaps.length} 項</p>
-            <ul className="mt-1 list-disc pl-5">
-              {gaps.slice(0, 8).map((g, i) => (
-                <li key={i}>
-                  {g.node_id ? (
-                    <button className="hover:underline" onClick={() => onSelect({ type: "node", id: g.node_id! })}>
-                      {g.node_title}：{g.label}
-                    </button>
-                  ) : (
-                    `整體流程：${g.label}`
-                  )}
-                </li>
-              ))}
-            </ul>
-            {overall.some((g) => g.field === "exceptions") && (
-              <p className="mt-2 text-xs">提示：例外處理與人工接管，是導入 AI 前最常被忽略的條件。</p>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  if (!selection) return null; // 沒選取時改由流程圖左上角的 GapHint 顯示待補清單
 
   if (selection.type === "edge") {
     const edge = flow.edges.find((e) => edgeId(e) === selection.id);

@@ -10,8 +10,12 @@ from sqlalchemy.orm import Session
 from . import llm, models, opendata  # noqa: F401  models 需先載入，create_all 才會建表
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
-from .routers import companies, mock, projects, report, sandbox
+from .routers import companies, documents, mock, projects, report, sandbox
 from .routers import opendata as opendata_router
+
+# pgvector 擴充通常由 db/init 建立；資料庫若是先前建的，在此補上
+with engine.begin() as conn:
+    conn.execute(text("create extension if not exists vector"))
 
 # 原型階段直接依模型建表；資料表穩定後再改用 Alembic 管理版本
 Base.metadata.create_all(engine)
@@ -50,6 +54,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="BizPilot AI API", lifespan=lifespan)
 app.include_router(companies.router)
+app.include_router(documents.router)
 app.include_router(projects.router)
 app.include_router(opendata_router.router)
 app.include_router(sandbox.router)

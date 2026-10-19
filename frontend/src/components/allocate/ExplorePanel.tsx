@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Star } from "lucide-react";
+import SourceList from "@/components/docs/SourceList";
 import { MODE_LABEL, MODE_STYLE, type Allocation, type Fit, type FlowNode, type Mode, type ModeOption } from "@/lib/types";
 
 const FIT_STYLE: Record<Fit, string> = {
@@ -53,6 +54,7 @@ export default function ExplorePanel({ node, allocation, exploring, onExplore, o
               <span className="font-medium text-slate-700">改善目標：</span>
               {exp.goal}
             </p>
+            {allocation?.sources && <SourceList sources={allocation.sources} title="分析時參考的企業文件" />}
           </section>
 
           <section className="space-y-3">

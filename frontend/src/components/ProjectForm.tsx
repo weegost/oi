@@ -1,7 +1,9 @@
 "use client";
 
+import { ClipboardList } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import SectionTitle from "@/components/SectionTitle";
 import { apiSend } from "@/lib/api";
 import type { Company, Project } from "@/lib/types";
 
@@ -33,8 +35,8 @@ export default function ProjectForm({ company }: { company: Company }) {
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
-      <h2 className="text-lg font-semibold">建立改善專案</h2>
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+      <SectionTitle icon={ClipboardList}>建立改善專案</SectionTitle>
       <p className="mt-1 text-sm text-slate-500">
         先選一項想改善的工作。這些內容會成為流程 Agent 整理與追問時的背景。
       </p>

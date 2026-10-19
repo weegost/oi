@@ -1,5 +1,6 @@
 import time
 from functools import lru_cache
+from typing import Literal
 
 from google import genai
 from google.genai import errors, types
@@ -58,3 +59,20 @@ def generate_json[T: BaseModel](prompt: str, schema: type[T], system: str | None
     if isinstance(response.parsed, schema):
         return response.parsed
     return schema.model_validate_json(response.text or "{}")
+
+
+EmbedTask = Literal["RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY"]
+
+
+def embed(texts: list[str], task: EmbedTask, dim: int) -> list[list[float]]:
+    """把多段文字轉成向量。每段要包成獨立的 Content，否則 gemini-embedding-2 會合併成一個向量。"""
+    vectors: list[list[float]] = []
+    for i in range(0, len(texts), 100):  # 單次請求上限 100 段
+        batch = [types.Content(parts=[types.Part(text=t)]) for t in texts[i : i + 100]]
+        r = get_client().models.embed_content(
+            model=settings.gemini_embedding_model,
+            contents=batch,
+            config=types.EmbedContentConfig(task_type=task, output_dimensionality=dim),
+        )
+        vectors += [list(e.values or []) for e in r.embeddings or []]
+    return vectors

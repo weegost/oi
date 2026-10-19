@@ -18,7 +18,7 @@ export default function CompanyCard({ company }: { company: Company }) {
   const described = company.business_items.filter((i) => !i.code);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">

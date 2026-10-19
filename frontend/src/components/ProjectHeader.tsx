@@ -1,11 +1,12 @@
 import Link from "next/link";
 import BrandMark from "@/components/BrandMark";
 import StageNav from "@/components/StageNav";
+import ThemeToggle from "@/components/ThemeToggle";
 import type { Project } from "@/lib/types";
 
 export default function ProjectHeader({ project, stage }: { project: Project; stage: number }) {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-t-4 border-b border-t-brand-600 border-b-slate-200 bg-white px-4 py-2.5">
       <div className="flex min-w-0 items-center gap-4">
         <Link href="/" aria-label="回首頁" className="rounded-lg">
           <BrandMark compact />
@@ -15,7 +16,10 @@ export default function ProjectHeader({ project, stage }: { project: Project; st
           <h1 className="truncate text-base font-semibold text-slate-900">{project.name}</h1>
         </div>
       </div>
-      <StageNav current={stage} projectId={project.id} />
+      <div className="flex items-center gap-3">
+        <StageNav current={stage} projectId={project.id} />
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

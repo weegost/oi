@@ -129,6 +129,8 @@ def build(p: Project, company: Company) -> dict:
             "work": p.work,
             "problem": p.problem,
             "scope": p.scope,
+            # AI 探索時引用過的企業文件
+            "documents": _uniq([src["filename"] for a in allocs.values() for src in a.get("sources", [])]),
             "stats": {
                 "steps": len(tasks),
                 "ai_steps": len(ai_steps),
@@ -179,6 +181,10 @@ def to_markdown(r: dict) -> str:
         f"- 目前問題：{o['problem']}",
         f"- 分析範圍：{o['scope']}",
         f"- 規模：{o['stats']['steps']} 個工作步驟，其中 {o['stats']['ai_steps']} 步規劃 AI 介入",
+    ]
+    if o["documents"]:
+        L.append(f"- 分析參考的企業文件：{'、'.join(o['documents'])}")
+    L += [
         "",
         "## 2. 現況工作流程",
         "",

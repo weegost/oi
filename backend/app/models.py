@@ -1,10 +1,13 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
+
+EMBED_DIM = 768  # gemini-embedding-2 輸出維度（縮成 768，儲存與檢索較快）
 
 
 class Company(Base):
@@ -67,6 +70,36 @@ class FlowVersion(Base):
     source: Mapped[str] = mapped_column(String(20))  # agent／manual／demo
     flow: Mapped[dict] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---- 企業文件（RAG） ----
+
+
+class Document(Base):
+    """企業上傳的 SOP、FAQ、政策、商品資料；屬於企業，同一企業的各專案共用。"""
+
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tax_id: Mapped[str] = mapped_column(ForeignKey("companies.tax_id"), index=True)
+    filename: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(20))  # SOP／FAQ／政策／商品資料／其他
+    chars: Mapped[int] = mapped_column(Integer)
+    embedded: Mapped[bool] = mapped_column(default=False)  # False：向量化失敗，只能用關鍵字檢索
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DocChunk(Base):
+    """文件切成的段落與其向量，檢索時依工作節點或對話內容找出最相關的段落。"""
+
+    __tablename__ = "doc_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    tax_id: Mapped[str] = mapped_column(String(8), index=True)
+    idx: Mapped[int] = mapped_column(Integer)  # 文件中的第幾段（從 1 起算）
+    text: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM), nullable=True)
 
 
 # ---- 政府開放資料 ----

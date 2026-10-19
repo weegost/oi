@@ -51,7 +51,29 @@ export type FlowEdge = { source: string; target: string; label: string };
 export type Flow = { nodes: FlowNode[]; edges: FlowEdge[] };
 
 export type Gap = { node_id: string | null; node_title: string; field: string; label: string };
-export type ChatMessage = { role: "user" | "assistant"; mode: "direct" | "guided"; text: string };
+export type ChatMessage = {
+  role: "user" | "assistant";
+  mode: "direct" | "guided";
+  text: string;
+  sources?: DocSource[]; // Agent 這次參考的企業文件段落
+};
+
+// ---- 企業文件（RAG） ----
+
+export type DocKind = "SOP" | "FAQ" | "政策" | "商品資料" | "其他";
+export const DOC_KINDS: DocKind[] = ["SOP", "FAQ", "政策", "商品資料", "其他"];
+
+export type CompanyDocument = {
+  id: number;
+  filename: string;
+  kind: DocKind;
+  chars: number;
+  chunks: number;
+  embedded: boolean; // false：向量化失敗，只能用關鍵字檢索
+  created_at: string;
+};
+
+export type DocSource = { filename: string; kind: DocKind; idx: number; text: string; score: number };
 
 export type Project = {
   id: number;
@@ -90,7 +112,7 @@ export type Exploration = {
   recommended: Mode;
 };
 
-export type Allocation = { mode: Mode; exploration?: Exploration; node_title: string };
+export type Allocation = { mode: Mode; exploration?: Exploration; sources?: DocSource[]; node_title: string };
 
 export const MODE_LABEL: Record<Mode, string> = {
   human: "人工執行",
@@ -171,6 +193,7 @@ export type ReportData = {
     work: string;
     problem: string;
     scope: string;
+    documents: string[];
     stats: { steps: number; ai_steps: number; cases: number; gaps: number };
   };
   steps: { title: string; kind: string; role: string; system: string; data: string; condition: string; exceptions: string; status: string }[];

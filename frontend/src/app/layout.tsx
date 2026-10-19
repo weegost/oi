@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Noto_Sans_TC, Plus_Jakarta_Sans } from "next/font/google";
+import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
 // 英數用 Plus Jakarta Sans，中文用 Noto Sans TC
@@ -29,7 +30,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="zh-Hant"
       className={`${jakarta.variable} ${notoTC.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning // 內嵌腳本可能在 React 載入前加上 dark class
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

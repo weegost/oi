@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import SourceList from "@/components/docs/SourceList";
 import type { ChatMessage } from "@/lib/types";
 
 export type Mode = "direct" | "guided";
@@ -71,6 +72,7 @@ export default function ChatPanel({ messages, mode, busy, onModeChange, onSend }
                 </span>
               )}
               {m.text}
+              {m.sources && <SourceList sources={m.sources} />}
             </div>
           </div>
         ))}

@@ -24,3 +24,12 @@ export function apiSend<T>(method: "POST" | "PUT", path: string, body?: unknown)
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
+
+export function apiDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "DELETE" });
+}
+
+/** 上傳檔案：瀏覽器會自動帶入 multipart 的 Content-Type，這裡不要自己設定 */
+export function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  return request<T>(path, { method: "POST", body: form });
+}

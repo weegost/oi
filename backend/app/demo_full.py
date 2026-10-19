@@ -9,14 +9,30 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import rag
 from .demo import DEMO_FULL_FLOW, DEMO_FULL_MESSAGES, DEMO_FULL_MODES, DEMO_FULL_SANDBOX_CONFIG, DEMO_PROJECT
-from .models import FlowVersion, Project
+from .models import Document, FlowVersion, Project
 from .sandbox import service
 
 DEMO_TAX_ID = "00000000"
 BAKED_PATH = Path(__file__).parent / "demo_data" / "demo_full.json"
+DOCS_DIR = Path(__file__).parent / "demo_data" / "docs"
+DOC_VECTORS_PATH = Path(__file__).parent / "demo_data" / "demo_docs.json"
+DEMO_DOCS = [("退貨政策.md", "政策"), ("客服退貨SOP.md", "SOP"), ("常見問題FAQ.md", "FAQ")]
+
+
+def seed_documents(db: Session):
+    """示範企業還沒有文件時，放入退貨政策、客服 SOP、FAQ。
+    向量事先以 scripts/bake_demo.py 產生，載入時不呼叫 Gemini；沒有預存向量才即時向量化。"""
+    if db.scalar(select(Document.id).where(Document.tax_id == DEMO_TAX_ID).limit(1)):
+        return
+    vectors = json.loads(DOC_VECTORS_PATH.read_text(encoding="utf-8")) if DOC_VECTORS_PATH.exists() else {}
+    for filename, kind in DEMO_DOCS:
+        text = (DOCS_DIR / filename).read_text(encoding="utf-8")
+        rag.add_document(db, DEMO_TAX_ID, filename, kind, text, vectors.get(filename))
 
 
 def load_baked() -> dict:
@@ -32,8 +48,15 @@ def baked_exploration(node_id: str, node_title: str, baked: dict | None = None) 
     return hit["exploration"] if hit and hit["node_title"] == node_title else None
 
 
+def baked_sources(node_id: str, node_title: str, baked: dict | None = None) -> list[dict]:
+    """預存分析當時引用的文件段落。"""
+    hit = (baked or load_baked())["explorations"].get(node_id)
+    return hit.get("sources", []) if hit and hit["node_title"] == node_title else []
+
+
 def create(db: Session, baked: dict | None = None) -> Project:
     baked = baked or load_baked()
+    seed_documents(db)
     flow = copy.deepcopy(DEMO_FULL_FLOW)
     titles = {n["id"]: n["title"] for n in flow["nodes"]}
     allocations = {}
@@ -41,6 +64,7 @@ def create(db: Session, baked: dict | None = None) -> Project:
         allocations[node_id] = {"mode": mode, "node_title": titles[node_id]}
         if exp := baked_exploration(node_id, titles[node_id], baked):
             allocations[node_id]["exploration"] = exp
+            allocations[node_id]["sources"] = baked_sources(node_id, titles[node_id], baked)
 
     p = Project(
         tax_id=DEMO_TAX_ID,

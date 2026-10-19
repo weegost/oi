@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import agent, allocation, demo_full, llm
+from .. import agent, allocation, demo_full, llm, rag
 from ..allocation import Mode
 from ..db import get_db
 from ..demo import DEMO_FLOW, DEMO_MESSAGES, DEMO_PROJECT
@@ -86,6 +86,7 @@ def create_demo_project(full: bool = False, db: Session = Depends(get_db)):
         p = demo_full.create(db)
         db.commit()
         return _out(p, company)
+    demo_full.seed_documents(db)
     p = Project(tax_id="00000000", **DEMO_PROJECT, flow={}, messages=copy.deepcopy(DEMO_MESSAGES))
     db.add(p)
     db.flush()
@@ -122,7 +123,9 @@ def chat(project_id: int, body: ChatRequest, db: Session = Depends(get_db)):
         "scope": p.scope,
     }
     try:
-        result = agent.run(body.mode, context, p.flow, p.messages, body.message)
+        result = agent.run(
+            body.mode, context, p.flow, p.messages, body.message, retriever=lambda q: rag.search(db, p.tax_id, q)
+        )
     except llm.LLMNotConfigured as e:
         raise HTTPException(503, str(e))
     except Exception as e:  # 模型忙碌或輸出格式錯誤：流程不變，請企業重試
@@ -131,7 +134,9 @@ def chat(project_id: int, body: ChatRequest, db: Session = Depends(get_db)):
     messages = list(p.messages)
     if body.message.strip():
         messages.append({"role": "user", "mode": body.mode, "text": body.message.strip()})
-    messages.append({"role": "assistant", "mode": body.mode, "text": result["reply"]})
+    messages.append(
+        {"role": "assistant", "mode": body.mode, "text": result["reply"], "sources": result.get("docs", [])}
+    )
     p.messages = messages
     if result["flow"] != p.flow:
         _save_flow(db, p, result["flow"], "agent")
@@ -173,7 +178,13 @@ def explore_node(project_id: int, node_id: str, db: Session = Depends(get_db)):
     # 示範案例的步驟若與預存時相同，直接使用預存分析，報告現場不用等 AI
     baked = demo_full.baked_exploration(node.id, node.title) if p.tax_id == demo_full.DEMO_TAX_ID else None
     try:
-        exp = allocation.Exploration.model_validate(baked) if baked else allocation.explore(context, flow, node)
+        if baked:
+            exp = allocation.Exploration.model_validate(baked)
+            sources = demo_full.baked_sources(node.id, node.title)
+        else:
+            # 依這一步的內容檢索企業文件，讓分析符合企業自己的規定
+            sources = rag.search(db, p.tax_id, allocation.node_query(node))
+            exp = allocation.explore(context, flow, node, sources)
     except llm.LLMNotConfigured as e:
         raise HTTPException(503, str(e))
     except Exception as e:
@@ -185,6 +196,7 @@ def explore_node(project_id: int, node_id: str, db: Session = Depends(get_db)):
         node_id: {
             "mode": current.get("mode", "human"),
             "exploration": exp.model_dump(),
+            "sources": sources,
             "node_title": node.title,
         },
     }

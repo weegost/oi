@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import llm
+from . import llm, rag
 from .flow import Flow, FlowNode
 
 Mode = Literal["human", "assist", "review", "auto"]
@@ -93,10 +93,16 @@ SYSTEM = """你是「智行進業」的 AI 導入顧問，協助台灣中小企�
 - AI 導入不等於全面自動化。要清楚說明 AI 做什麼、人做什麼、什麼情況要人接手。
 - 只根據企業目前的流程與條件評估，不推銷特定產品。
 - 權限要具體到「讀取訂單」「寫入退款紀錄」這種層級。
-- 使用繁體中文，讓不懂技術的老闆也看得懂。"""
+- 使用繁體中文，讓不懂技術的老闆也看得懂。
+- 有企業文件時，所需資料、權限與人工接管條件要符合文件中的規定（例如金額門檻、處理時限）。"""
 
 
-def explore(context: dict, flow: Flow, node: FlowNode) -> Exploration:
+def node_query(node: FlowNode) -> str:
+    """檢索企業文件用的查詢文字：步驟名稱加上條件、資料與例外。"""
+    return " ".join(filter(None, [node.title, node.description, node.condition, node.data, node.exceptions]))
+
+
+def explore(context: dict, flow: Flow, node: FlowNode, docs: list[dict] | None = None) -> Exploration:
     steps = "\n".join(f"- {n.title}（{n.role or '未填'}）" for n in flow.nodes if n.kind not in ("start", "end"))
     prompt = f"""企業：{context['company']}（{context['industry']}）
 想改善的工作：{context['work']}
@@ -108,6 +114,7 @@ def explore(context: dict, flow: Flow, node: FlowNode) -> Exploration:
 要評估的步驟：
 {node.model_dump_json(exclude={"x", "y", "status", "source"})}
 
+{rag.as_prompt(docs or [])}
 請評估 AI 能如何介入「{node.title}」：
 1. 列出 AI 可協助的具體任務與改善目標。
 2. 分別說明四種分工方式（human 人工執行、assist AI 輔助、review AI 執行後人工確認、auto AI 自動執行）
