@@ -21,3 +21,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# 報表設計稿（本機草稿，不納入版控）
+mockups/

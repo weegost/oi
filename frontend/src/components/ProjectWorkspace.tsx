@@ -109,8 +109,9 @@ export default function ProjectWorkspace() {
   const switchMode = (m: Mode) => {
     if (m === mode || busy) return;
     setMode(m);
-    // 切到 AI 引導時，請 Agent 依目前缺口主動提出第一個問題
-    if (m === "guided") chat("guided", "");
+    // 切到 AI 引導時，還有缺口（或流程是空的）才請 Agent 主動提問；
+    // 流程已完整時不再呼叫，否則每次切換都會重複一句「流程資訊已大致完整」
+    if (m === "guided" && (flow.nodes.length === 0 || gaps.length > 0)) chat("guided", "");
   };
 
   const addNode = () => {

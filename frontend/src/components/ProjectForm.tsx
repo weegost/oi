@@ -1,9 +1,11 @@
 "use client";
 
 import { ClipboardList } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import SectionTitle from "@/components/SectionTitle";
+import { useAccount } from "@/lib/account";
 import { apiSend } from "@/lib/api";
 import type { Company, Project } from "@/lib/types";
 
@@ -11,14 +13,16 @@ const FIELDS = [
   { key: "name", label: "專案名稱", placeholder: "例如：退貨客服流程改善", required: true },
   { key: "work", label: "想改善的工作", placeholder: "例如：處理客戶退貨申請", required: true },
   { key: "problem", label: "目前遇到的問題", placeholder: "例如：客服要反覆查訂單和退貨政策，回覆很慢", multiline: true },
-  { key: "scope", label: "分析範圍", placeholder: "例如：從收到客戶訊息到回覆客戶", multiline: true },
 ] as const;
 
 type FormKey = (typeof FIELDS)[number]["key"];
 
-export default function ProjectForm({ company }: { company: Company }) {
+/** company 為 null 時代表沒查統編，改由使用者自填公司名稱（選填） */
+export default function ProjectForm({ company }: { company: Company | null }) {
   const router = useRouter();
-  const [form, setForm] = useState<Record<FormKey, string>>({ name: "", work: "", problem: "", scope: "" });
+  const [form, setForm] = useState<Record<FormKey, string>>({ name: "", work: "", problem: "" });
+  const account = useAccount();
+  const [companyName, setCompanyName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,9 +48,30 @@ export default function ProjectForm({ company }: { company: Company }) {
         className="mt-4 grid gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
-          go(() => apiSend<Project>("POST", "/api/projects", { tax_id: company.tax_id, ...form }));
+          go(() =>
+            apiSend<Project>(
+              "POST",
+              "/api/projects",
+              company
+                ? { tax_id: company.tax_id, ...form }
+                : { company_name: companyName || account?.display_name || "", ...form },
+            ),
+          );
         }}
       >
+        {!company && (
+          <label className="text-sm sm:col-span-2">
+            <span className="font-medium text-slate-700">
+              公司名稱<span className="font-normal text-slate-500">（選填）</span>
+            </span>
+            <input
+              value={companyName}
+              placeholder={account?.display_name ? `沒填會用「${account.display_name}」` : "沒填會顯示「我的公司」"}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+          </label>
+        )}
         {FIELDS.map((f) => (
           <label key={f.key} className={"text-sm " + ("multiline" in f ? "sm:col-span-2" : "")}>
             <span className="font-medium text-slate-700">
@@ -73,7 +98,7 @@ export default function ProjectForm({ company }: { company: Company }) {
           </label>
         ))}
         <div className="flex flex-wrap items-center justify-end gap-3 sm:col-span-2">
-          {company.registration_type === "demo" && (
+          {company?.registration_type === "demo" && (
             <>
               <button
                 type="button"
@@ -103,6 +128,14 @@ export default function ProjectForm({ company }: { company: Company }) {
             {busy ? "建立中…" : "開始建立現況流程 →"}
           </button>
         </div>
+        {account === null && (
+          <p className="text-right text-xs text-slate-500 sm:col-span-2">
+            目前未登入：這次的分析不會保存，之後無法回來查看。
+            <Link href="/login" className="ml-1 font-medium text-brand-600 hover:underline">
+              登入或註冊
+            </Link>
+          </p>
+        )}
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
       </form>
     </section>

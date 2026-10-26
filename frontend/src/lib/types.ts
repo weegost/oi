@@ -16,7 +16,7 @@ export type Industry = {
 export type Company = {
   tax_id: string;
   name: string;
-  registration_type: "company" | "business" | "demo";
+  registration_type: "company" | "business" | "demo" | "manual"; // manual：沒查統編，自填名稱
   owner: string;
   address: string;
   status: string;
@@ -182,12 +182,15 @@ export type OpenDataSummary = {
 // ---- 需求草案 ----
 
 export type ReportData = {
+  system: string; // 頁首的系統名稱
+  disclaimer: string; // 頁尾免責聲明
   title: string;
   generated_on: string;
   overview: {
     company: string;
     tax_id: string;
     is_demo: boolean;
+    has_tax_id: boolean;
     industry: string;
     project: string;
     work: string;
@@ -199,6 +202,7 @@ export type ReportData = {
   steps: { title: string; kind: string; role: string; system: string; data: string; condition: string; exceptions: string; status: string }[];
   allocations: {
     step: string;
+    role: string;
     mode: string;
     recommended: string | null;
     ai_tasks: string[];

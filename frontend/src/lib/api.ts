@@ -3,7 +3,8 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:80
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, init);
+    // 帶上登入 cookie（前後端埠號不同，需明確指定）
+    res = await fetch(`${API_BASE}${path}`, { ...init, credentials: "include" });
   } catch {
     // 連不到伺服器時瀏覽器只會丟出「Failed to fetch」，改成看得懂的說明
     throw new Error(`無法連線到後端（${API_BASE}），請確認後端已經啟動。`);

@@ -85,7 +85,10 @@ def test_markdown_download(project):
     assert res.status_code == 200
     assert "AI 導入需求草案" in unquote(res.headers["content-disposition"])
     body = res.content.decode("utf-8")
-    assert "## 9. 尚待確認事項" in body and "查詢訂單資料" in body
+    for heading in ["1. 專案概要", "2. 專案摘要", "3. 人力與 AI 分配", "4. 現行工作流程", "5. AI 所需資料", "6. AI 操作權限", "7. 主要風險"]:
+        assert f"## {heading}" in body
+    assert body.startswith("> 智行進業 BizPilot AI") and body.rstrip().endswith("也不會實際退款或開通權限。")
+    assert "查詢訂單資料" in body
 
 
 def test_docx_download_opens_in_word(project):
@@ -93,7 +96,10 @@ def test_docx_download_opens_in_word(project):
     doc = Document(io.BytesIO(res.content))
     texts = [p.text for p in doc.paragraphs]
     assert any("AI 導入需求草案" in t for t in texts)
-    assert doc.tables and doc.tables[0].rows[0].cells[1].text == "步驟"
+    assert [c.text for c in doc.tables[0].rows[0].cells] == ["步驟", "分工方式", "AI 負責", "人員負責"]
+    section = doc.sections[0]
+    assert "智行進業 BizPilot AI" in section.header.paragraphs[0].text
+    assert section.footer.paragraphs[0].text.startswith("免責聲明")
 
 
 def test_ai_summary_is_saved_and_shown(project, monkeypatch):
@@ -101,3 +107,19 @@ def test_ai_summary_is_saved_and_shown(project, monkeypatch):
     r = client.post(f"/api/projects/{project}/report/summary").json()
     assert r["ai_summary"] == "這是摘要。"
     assert "AI 撰寫" in client.get(f"/api/projects/{project}/report/markdown").content.decode()
+
+
+@pytest.mark.parametrize("company_name, shown", [("阿明電器行", "阿明電器行"), ("", "我的公司")])
+def test_project_without_tax_id(company_name, shown):
+    """不查統編也能開始；公司名稱可自填，沒填就叫「我的公司」，草案不顯示統編。"""
+    res = client.post("/api/projects", json={"company_name": company_name, "name": "退貨改善", "work": "處理退貨"})
+    assert res.status_code == 200
+    p = res.json()
+    try:
+        assert p["company_name"] == shown and p["tax_id"].startswith("M")
+        body = client.get(f"/api/projects/{p['id']}/report/markdown").content.decode("utf-8")
+        assert f"- 企業：{shown}\n" in body
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("delete from projects where id = :id"), {"id": p["id"]})
+            conn.execute(text("delete from companies where tax_id = :t"), {"t": p["tax_id"]})

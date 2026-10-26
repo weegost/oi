@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import type { Flow, FlowNode, Gap, NodeKind, NodeStatus } from "@/lib/types";
 import { edgeId, type Selection } from "./FlowCanvas";
 
@@ -18,14 +19,20 @@ const STATUSES: { value: NodeStatus; label: string; cls: string }[] = [
   { value: "clarify", label: "待釐清", cls: "border-amber-500 bg-amber-50 text-amber-800" },
 ];
 
-const FIELDS: { key: keyof FlowNode; label: string; hint: string; decisionOnly?: boolean }[] = [
-  { key: "role", label: "負責角色", hint: "例如：客服專員" },
-  { key: "system", label: "使用的系統／工具", hint: "例如：蝦皮賣家中心、Excel" },
-  { key: "data", label: "需要的資料", hint: "例如：訂單編號、商品照片" },
-  { key: "condition", label: "判斷條件", hint: "例如：訂單在七天內且商品未使用", decisionOnly: true },
-  { key: "output", label: "產出", hint: "這一步完成後產生什麼" },
-  { key: "exceptions", label: "例外狀況", hint: "遇到什麼情況要改由別人處理" },
-  { key: "description", label: "補充說明", hint: "" },
+type Field = { key: keyof FlowNode; label: string; hint: string; decisionOnly?: boolean };
+
+// 常用的三項（判斷步驟多一項）預設顯示，其餘收進「更多」，避免一次看到太多欄位
+const MAIN_FIELDS: Field[] = [
+  { key: "role", label: "誰負責這一步？", hint: "例如：客服專員" },
+  { key: "system", label: "用什麼系統或工具？", hint: "例如：蝦皮賣家中心、Excel" },
+  { key: "data", label: "需要哪些資料？", hint: "例如：訂單編號、商品照片" },
+  { key: "condition", label: "怎麼判斷？", hint: "例如：訂單在七天內而且商品沒用過", decisionOnly: true },
+];
+
+const MORE_FIELDS: Field[] = [
+  { key: "output", label: "做完這一步會得到什麼？", hint: "例如：查到的訂單資料、回覆客人的訊息" },
+  { key: "exceptions", label: "什麼情況要交給別人處理？", hint: "例如：客人說商品會發燙，就轉給主管" },
+  { key: "description", label: "其他想補充的", hint: "" },
 ];
 
 const input =
@@ -82,6 +89,7 @@ export default function DetailPanel({ flow, gaps, selection, onChange, onSelect 
   const node = flow.nodes.find((n) => n.id === selection.id);
   if (!node) return null;
   const nodeGaps = gaps.filter((g) => g.node_id === node.id);
+  const terminal = node.kind === "start" || node.kind === "end";
   const update = (patch: Partial<FlowNode>) =>
     onChange({ ...flow, nodes: flow.nodes.map((n) => (n.id === node.id ? { ...n, ...patch } : n)) });
 
@@ -114,51 +122,69 @@ export default function DetailPanel({ flow, gaps, selection, onChange, onSelect 
       )}
 
       <label className="block">
-        <span className="text-slate-600">步驟名稱</span>
+        <span className="text-slate-600">這一步在做什麼？</span>
         <input className={input} value={node.title} onChange={(e) => update({ title: e.target.value })} />
       </label>
-      <label className="block">
-        <span className="text-slate-600">類型</span>
-        <select
-          className={input}
-          value={node.kind}
-          onChange={(e) => update({ kind: e.target.value as NodeKind })}
-        >
-          {KINDS.map((k) => (
-            <option key={k.value} value={k.value}>
-              {k.label}
-            </option>
-          ))}
-        </select>
-      </label>
 
-      {node.kind !== "start" &&
-        node.kind !== "end" &&
-        FIELDS.filter((f) => !f.decisionOnly || node.kind === "decision").map((f) => (
-          <label key={f.key} className="block">
-            <span className="text-slate-600">{f.label}</span>
-            <textarea
-              rows={f.key === "description" ? 3 : 2}
-              className={input}
-              placeholder={f.hint}
-              value={String(node[f.key] ?? "")}
-              onChange={(e) => update({ [f.key]: e.target.value, source: "企業描述" })}
-            />
-          </label>
+      {!terminal &&
+        MAIN_FIELDS.filter((f) => !f.decisionOnly || node.kind === "decision").map((f) => (
+          <Field key={f.key} field={f} node={node} update={update} />
         ))}
 
-      <button
-        className="text-red-600 hover:underline"
-        onClick={() => {
-          onChange({
-            nodes: flow.nodes.filter((n) => n.id !== node.id),
-            edges: flow.edges.filter((e) => e.source !== node.id && e.target !== node.id),
-          });
-          onSelect(null);
-        }}
-      >
-        刪除這個步驟
-      </button>
+      <details className="group rounded-lg border border-slate-200">
+        <summary className="flex list-none items-center gap-1 px-3 py-2 text-slate-600 [&::-webkit-details-marker]:hidden">
+          <ChevronDown aria-hidden className="h-4 w-4 transition-transform group-open:rotate-180" />
+          更多
+        </summary>
+        <div className="space-y-3 border-t border-slate-100 p-3">
+          <label className="block">
+            <span className="text-slate-600">這是哪一種步驟？</span>
+            <select className={input} value={node.kind} onChange={(e) => update({ kind: e.target.value as NodeKind })}>
+              {KINDS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!terminal && MORE_FIELDS.map((f) => <Field key={f.key} field={f} node={node} update={update} />)}
+          <button
+            className="text-red-600 hover:underline"
+            onClick={() => {
+              onChange({
+                nodes: flow.nodes.filter((n) => n.id !== node.id),
+                edges: flow.edges.filter((e) => e.source !== node.id && e.target !== node.id),
+              });
+              onSelect(null);
+            }}
+          >
+            刪除這個步驟
+          </button>
+        </div>
+      </details>
     </div>
+  );
+}
+
+function Field({
+  field,
+  node,
+  update,
+}: {
+  field: Field;
+  node: FlowNode;
+  update: (patch: Partial<FlowNode>) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-slate-600">{field.label}</span>
+      <textarea
+        rows={field.key === "description" ? 3 : 2}
+        className={input}
+        placeholder={field.hint}
+        value={String(node[field.key] ?? "")}
+        onChange={(e) => update({ [field.key]: e.target.value, source: "企業描述" })}
+      />
+    </label>
   );
 }

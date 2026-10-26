@@ -1,4 +1,5 @@
 import copy
+import secrets
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,17 +8,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import agent, allocation, demo_full, llm, rag
+from ..auth import check_project_access, optional_account
 from ..allocation import Mode
 from ..db import get_db
 from ..demo import DEMO_FLOW, DEMO_MESSAGES, DEMO_PROJECT
 from ..flow import Flow, find_gaps
-from ..models import Company, FlowVersion, Project
+from ..models import Account, Company, FlowVersion, Project
 
-router = APIRouter(prefix="/api/projects", tags=["projects"])
+# 網址有 project_id 的端點都會檢查：屬於某帳號的專案只有該帳號能看
+router = APIRouter(prefix="/api/projects", tags=["projects"], dependencies=[Depends(check_project_access)])
 
 
 class ProjectCreate(BaseModel):
-    tax_id: str
+    tax_id: str = ""  # 留空表示不查統編，直接開始
+    company_name: str = ""  # 不查統編時由使用者自填，可留空
     name: str
     work: str = ""
     problem: str = ""
@@ -64,19 +68,83 @@ def _save_flow(db: Session, p: Project, flow: dict, source: str):
     db.add(FlowVersion(project_id=p.id, source=source, flow=flow))
 
 
+def _manual_company(db: Session, name: str) -> Company:
+    """沒有統編的企業：建立一筆自填資料，以 M 開頭的代碼識別（不會和 8 位數字的統編重複）。"""
+    while db.get(Company, tax_id := f"M{secrets.randbelow(10**7):07d}"):
+        pass
+    company = Company(
+        tax_id=tax_id,
+        name=name.strip() or "我的公司",
+        registration_type="manual",
+        industry={"label": "", "is_3c": False, "online_retail": False, "matched_items": [], "demo_scenario": None},
+    )
+    db.add(company)
+    db.flush()
+    return company
+
+
+@router.get("")
+def list_projects(account: Account | None = Depends(optional_account), db: Session = Depends(get_db)):
+    """「我的專案」：登入帳號建立過的專案，最近更新的在前。"""
+    if not account:
+        raise HTTPException(401, "請先登入，才能查看之前的專案。")
+    rows = db.execute(
+        select(Project, Company)
+        .join(Company, Company.tax_id == Project.tax_id)
+        .where(Project.account_id == account.id)
+        .order_by(Project.updated_at.desc())
+    ).all()
+    out = []
+    for p, company in rows:
+        tasks = [n for n in (p.flow or {}).get("nodes", []) if n.get("kind") not in ("start", "end")]
+        # 做到第幾步：有流程 → 1，有 AI 分析 → 2，跑過模擬 → 3，有 AI 摘要 → 4
+        progress = 1 if tasks else 0
+        if any(a.get("exploration") for a in (p.allocations or {}).values()):
+            progress = 2
+        if (p.sandbox or {}).get("run"):
+            progress = 3
+        if (p.report or {}).get("summary"):
+            progress = 4
+        out.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "work": p.work,
+                "company_name": company.name,
+                "steps": len(tasks),
+                "progress": progress,
+                "updated_at": p.updated_at,
+            }
+        )
+    return out
+
+
 @router.post("")
-def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
-    company = db.get(Company, body.tax_id)
-    if not company:
-        raise HTTPException(400, "請先查詢統一編號，建立企業背景。")
-    p = Project(**body.model_dump(), flow={"nodes": [], "edges": []}, messages=[])
+def create_project(
+    body: ProjectCreate, account: Account | None = Depends(optional_account), db: Session = Depends(get_db)
+):
+    if body.tax_id:
+        company = db.get(Company, body.tax_id)
+        if not company:
+            raise HTTPException(400, "請先查詢統一編號，建立企業背景。")
+    else:
+        company = _manual_company(db, body.company_name)
+    p = Project(
+        **body.model_dump(exclude={"tax_id", "company_name"}),
+        tax_id=company.tax_id,
+        account_id=account.id if account else None,
+        flow={"nodes": [], "edges": []},
+        messages=[],
+    )
     db.add(p)
     db.commit()
     return _out(p, company)
 
 
 @router.post("/demo")
-def create_demo_project(full: bool = False, db: Session = Depends(get_db)):
+def create_demo_project(
+    full: bool = False, account: Account | None = Depends(optional_account), db: Session = Depends(get_db)
+):
     """建立「小名 3C 網店」示範專案（企業資料需先以 00000000 查詢建立）。
     full=true 時載入四個階段都已完成的完整示範，使用預存的 AI 分析，不需等待 AI。"""
     company = db.get(Company, "00000000")
@@ -84,10 +152,17 @@ def create_demo_project(full: bool = False, db: Session = Depends(get_db)):
         raise HTTPException(400, "請先以案例代碼 00000000 載入示範企業。")
     if full:
         p = demo_full.create(db)
+        p.account_id = account.id if account else None
         db.commit()
         return _out(p, company)
     demo_full.seed_documents(db)
-    p = Project(tax_id="00000000", **DEMO_PROJECT, flow={}, messages=copy.deepcopy(DEMO_MESSAGES))
+    p = Project(
+        tax_id="00000000",
+        **DEMO_PROJECT,
+        flow={},
+        messages=copy.deepcopy(DEMO_MESSAGES),
+        account_id=account.id if account else None,
+    )
     db.add(p)
     db.flush()
     _save_flow(db, p, copy.deepcopy(DEMO_FLOW), "demo")

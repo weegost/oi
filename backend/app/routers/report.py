@@ -6,10 +6,11 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from .. import llm, report
+from ..auth import check_project_access
 from ..db import get_db
 from .projects import _load
 
-router = APIRouter(prefix="/api/projects/{project_id}/report", tags=["report"])
+router = APIRouter(prefix="/api/projects/{project_id}/report", tags=["report"], dependencies=[Depends(check_project_access)])
 
 
 def _download(content: bytes, filename: str, media_type: str) -> Response:

@@ -31,6 +31,28 @@ class Company(Base):
     )
 
 
+class Account(Base):
+    """登入帳號：一家公司共用一個帳號，登入後可以回來看之前的專案。"""
+
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))  # scrypt，格式：salt$hash（hex）
+    display_name: Mapped[str] = mapped_column(String(200), default="")  # 公司名稱
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthToken(Base):
+    """登入狀態：瀏覽器 cookie 裡放的隨機字串，登出即刪除。"""
+
+    __tablename__ = "auth_tokens"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 def empty_flow() -> dict:
     return {"nodes": [], "edges": []}
 
@@ -42,6 +64,10 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tax_id: Mapped[str] = mapped_column(ForeignKey("companies.tax_id"))
+    # 登入時建立的專案屬於該帳號，只有該帳號能看；未登入建立的為 None，不會出現在任何人的專案列表
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(200))
     work: Mapped[str] = mapped_column(String(200), default="")  # 想改善的工作
     problem: Mapped[str] = mapped_column(Text, default="")  # 目前問題

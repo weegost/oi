@@ -1,6 +1,6 @@
 import type { Company } from "@/lib/types";
 
-const TYPE_LABEL = { company: "公司登記", business: "商業登記", demo: "虛構案例" } as const;
+const TYPE_LABEL = { company: "公司登記", business: "商業登記", demo: "虛構案例", manual: "自填" } as const;
 
 function formatCapital(v: string) {
   const n = Number(v);

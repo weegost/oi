@@ -3,26 +3,55 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ChevronDown, CircleHelp, Play } from "lucide-react";
 import ProjectHeader from "@/components/ProjectHeader";
-import CaseCard from "@/components/sandbox/CaseCard";
+import CaseStory, { VERDICT } from "@/components/sandbox/CaseStory";
 import OpenDataPanel from "@/components/sandbox/OpenDataPanel";
 import { apiGet, apiSend } from "@/lib/api";
-import type { Project, SandboxState } from "@/lib/types";
+import type { CaseResult, Project, SandboxState } from "@/lib/types";
 
-const GAP_STYLE: Record<string, string> = {
-  資料不足: "bg-sky-100 text-sky-800",
-  系統介接: "bg-violet-100 text-violet-800",
-  操作權限: "bg-orange-100 text-orange-800",
-  人工接管: "bg-red-100 text-red-800",
-  流程缺口: "bg-slate-200 text-slate-800",
+// 不懂 AI 的老闆也能回答：問的是公司現況與老闆的決定，不是問 AI 能做什麼。
+// 例：不問「AI 有沒有寫入權限」，而是問「你願不願意讓 AI 直接退款」。沒列到的沿用後端名稱。
+const PLAIN_CONDITION: Record<string, { label: string; hint: string }> = {
+  docs_ready: {
+    label: "我們有寫好的退貨規定或作業流程",
+    hint: "紙本、Word、公告都算。AI 要照規定回答客人，沒有規定就只能用猜的。",
+  },
+  api_connected: {
+    label: "訂單、物流資料都在系統裡（例如蝦皮後台）",
+    hint: "只記在本子或腦中的話，AI 查不到。",
+  },
+  read_permission: {
+    label: "我願意讓 AI 查看訂單和物流資料",
+    hint: "就像讓新進員工登入後台查資料，但不能改。",
+  },
+  write_permission: {
+    label: "我願意讓 AI 直接幫客人退款、回覆訊息",
+    hint: "不勾也沒關係，AI 可以先準備好，由人按下確認。",
+  },
+  required_fields: {
+    label: "客人資料不齊時，我們知道要請他補什麼",
+    hint: "例如沒給訂單編號，要請他提供姓名和手機末三碼。",
+  },
+  open_data: {
+    label: "希望系統順便比對政府公告的違規、召回商品",
+    hint: "例如客人買的行動電源，政府是否公告過有問題。",
+  },
+  handoff_owner: {
+    label: "出狀況時，已經指定誰接手、多久內處理",
+    hint: "例如商品冒煙一律由主管在 24 小時內打電話給客人。",
+  },
 };
+
+const ORDER: CaseResult["disposition"][] = ["AI 協助完成", "正確轉人工", "人工處理", "需補足條件"];
 
 export default function SandboxWorkspace() {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [state, setState] = useState<SandboxState | null>(null);
   const [config, setConfig] = useState<Record<string, boolean>>({});
-  const [scenarios, setScenarios] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null); // 目前展開說明的題目
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,18 +61,19 @@ export default function SandboxWorkspace() {
         setProject(p);
         setState(s);
         setConfig(s.config);
-        setScenarios(s.selected_scenarios);
       })
       .catch((e) => setError(e.message));
   }, [id]);
 
-  const run = async () => {
+  // 測試是固定規則、幾乎瞬間完成，所以每次打勾都直接重跑，讓企業馬上看到差別
+  const run = async (next: Record<string, boolean>) => {
+    setConfig(next);
     setRunning(true);
     setError(null);
     try {
-      setState(await apiSend<SandboxState>("POST", `/api/projects/${id}/sandbox/run`, { config, scenarios }));
+      setState(await apiSend<SandboxState>("POST", `/api/projects/${id}/sandbox/run`, { config: next, scenarios: [] }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "測試失敗");
+      setError(e instanceof Error ? e.message : "模擬失敗");
     } finally {
       setRunning(false);
     }
@@ -51,20 +81,19 @@ export default function SandboxWorkspace() {
 
   if (!project || !state) return <main className="p-8 text-slate-600">{error ?? "載入中…"}</main>;
 
+  const results = state.results;
   const aiSteps = Object.values(project.allocations).filter((a) => a.mode !== "human").length;
-  const changed = state.run > 0 && JSON.stringify(config) !== JSON.stringify(state.config);
+  const current = results.find((r) => r.id === selected) ?? results.find((r) => r.disposition === "需補足條件") ?? results[0];
 
   return (
-    <main className="flex h-screen flex-col">
+    <main className="flex min-h-screen flex-col">
       <ProjectHeader project={project} stage={2} />
 
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 text-sm">
         <Link href={`/projects/${id}/allocate`} className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-50">
           ← 調整人機分工
         </Link>
-        <span className="ml-2 text-slate-500">
-          {state.run ? `第 ${state.run} 次測試 · ${new Date(state.ran_at!).toLocaleString("zh-TW")}` : "尚未測試"}
-        </span>
+        <span className="ml-2 text-slate-500">用今天會遇到的客人，模擬 AI 上線後的樣子；不會真的退款或回覆客人</span>
         <Link
           href={`/projects/${id}/report`}
           className="ml-auto rounded-md bg-brand-600 px-3 py-1 font-medium text-white hover:bg-brand-700"
@@ -74,121 +103,155 @@ export default function SandboxWorkspace() {
       </div>
 
       {aiSteps === 0 && (
-        <p className="bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
-          目前所有步驟都是人工執行。先到「AI 介入探索」為步驟選擇 AI 分工，測試才會檢查 AI 需要的條件。
+        <p className="bg-amber-50 px-4 py-1.5 text-sm text-amber-900">
+          目前所有步驟都由人員處理。先到「AI 介入探索」為步驟選擇 AI 分工，才看得出 AI 上線後的差別。
         </p>
       )}
       {error && <p className="bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside className="shrink-0 overflow-y-auto border-b border-slate-200 bg-white lg:w-72 lg:border-r lg:border-b-0">
-          <section className="space-y-2 p-4 text-sm">
-            <h3 className="font-semibold">導入準備條件</h3>
-            <p className="text-xs text-slate-500">勾選代表「假設已準備好」，不會真的開通權限。</p>
-            {Object.entries(state.conditions).map(([key, label]) => (
-              <label key={key} className="flex cursor-pointer items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="mt-1 accent-brand-600"
-                  checked={!!config[key]}
-                  onChange={(e) => setConfig({ ...config, [key]: e.target.checked })}
-                />
-                <span>{label}</span>
-              </label>
-            ))}
-          </section>
-          <section className="border-t border-slate-100 p-4 text-sm">
-            <h3 className="font-semibold">測試情境</h3>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {state.scenarios.map((s) => {
-                const on = scenarios.includes(s);
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setScenarios(on ? scenarios.filter((x) => x !== s) : [...scenarios, s])}
-                    className={
-                      "rounded-full border px-2.5 py-0.5 text-xs " +
-                      (on ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-300 text-slate-600")
-                    }
-                  >
-                    {s}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-1 text-xs text-slate-400">{scenarios.length ? `只測 ${scenarios.join("、")}` : "全部情境"}</p>
-            <button
-              onClick={run}
-              disabled={running}
-              className="mt-3 w-full rounded-lg bg-brand-600 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-            >
-              {running ? "測試中…" : state.run ? "重新測試" : "執行情境測試"}
-            </button>
-            {changed && <p className="mt-1 text-xs text-amber-700">條件已變更，重新測試後才會反映。</p>}
-          </section>
-          <div className="border-t border-slate-100">
-            <OpenDataPanel />
-          </div>
-        </aside>
-
-        <section className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4">
-          {state.results.length === 0 ? (
-            <div className="mx-auto mt-16 max-w-md text-center text-slate-500">
-              <p className="text-lg font-medium text-slate-700">把人機分工放進實際情境測試</p>
-              <p className="mt-2 text-sm">
-                系統會用客服、退貨、物流延誤、消費爭議等案例，搭配模擬訂單與退款系統、政府開放資料，
-                檢查目前的分工還缺哪些資料、權限與人工接管條件。
-              </p>
+      <div className="mx-auto w-full max-w-6xl flex-1 space-y-4 p-4">
+        {/* 一句話總結 */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          {results.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-slate-900">模擬上線一天</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  系統準備了 7 位今天會遇到的客人：想退貨、問保固、包裹沒到、商品發燙、要申訴……
+                  看看照目前的分工，AI 能幫上哪些忙、哪些會交給人、哪些會卡住。
+                </p>
+              </div>
+              <button
+                onClick={() => run(config)}
+                disabled={running}
+                className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+              >
+                <Play aria-hidden className="h-4 w-4" />
+                {running ? "模擬中…" : "開始模擬一天"}
+              </button>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl space-y-3">
-              {state.results.map((r) => (
-                <CaseCard key={r.id} result={r} />
-              ))}
-            </div>
+            <>
+              <h2 className="text-lg font-semibold text-slate-900">
+                模擬上線一天：今天有 {results.length} 位客人來詢問
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {ORDER.filter((d) => state.summary?.dispositions[d]).map((d) => (
+                  <span key={d} className={"rounded-full px-3 py-1 text-sm font-medium " + VERDICT[d].chip}>
+                    {VERDICT[d].label} {state.summary!.dispositions[d]} 位
+                  </span>
+                ))}
+              </div>
+              {state.summary?.gaps.length === 0 && (
+                <p className="mt-3 text-sm text-emerald-700">照目前的準備，今天的客人都能妥善處理。</p>
+              )}
+              {(state.summary?.gaps.length ?? 0) > 0 && (
+                <p className="mt-3 text-sm text-slate-600">點左邊「卡住了」的客人，可以看卡住的原因和要準備什麼。</p>
+              )}
+            </>
           )}
         </section>
 
-        {state.summary && (
-          <aside className="shrink-0 overflow-y-auto border-t border-slate-200 bg-white p-4 text-sm lg:w-80 lg:border-t-0 lg:border-l">
-            <h3 className="font-semibold">測試結果</h3>
-            <ul className="mt-2 space-y-1">
-              {Object.entries(state.summary.dispositions).map(([d, n]) => (
-                <li key={d} className="flex justify-between">
-                  <span>{d}</span>
-                  <span className="font-semibold">{n} 件</span>
-                </li>
-              ))}
-            </ul>
-            <h3 className="mt-5 font-semibold">尚未具備的導入條件（{state.summary.gaps.length}）</h3>
-            {state.summary.gaps.length === 0 ? (
-              <p className="mt-2 text-emerald-700">目前分工在所有測試案例中都具備執行條件。</p>
-            ) : (
-              <ul className="mt-2 space-y-3">
-                {state.summary.gaps.map((g, i) => (
-                  <li key={i}>
-                    <span className={"rounded px-1.5 text-xs " + (GAP_STYLE[g.type] ?? "bg-slate-100")}>{g.type}</span>
-                    <p className="mt-1">{g.issue}</p>
-                    <p className="text-xs text-slate-500">影響 {g.cases.length} 個案例</p>
-                    {g.condition && !config[g.condition] && (
+        <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
+          <div className="space-y-4">
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
+              <h3 className="font-semibold text-slate-900">我們公司目前的狀況</h3>
+              <p className="mt-0.5 text-xs text-slate-500">不用懂 AI，照公司實際情況勾選就好；不確定的先不要勾。勾完右邊結果會馬上更新。</p>
+              <div className="mt-3 space-y-2">
+                {Object.keys(state.conditions).map((key) => {
+                  const plain = PLAIN_CONDITION[key];
+                  return (
+                    <div key={key} className="rounded-lg p-1 hover:bg-slate-50">
+                      <div className="flex items-start gap-2">
+                        <label className="flex flex-1 items-start gap-2">
+                          <input
+                            type="checkbox"
+                            className="mt-1 accent-brand-600"
+                            checked={!!config[key]}
+                            disabled={running}
+                            onChange={(e) => run({ ...config, [key]: e.target.checked })}
+                          />
+                          <span>{plain?.label ?? state.conditions[key]}</span>
+                        </label>
+                        {plain && (
+                          <button
+                            type="button"
+                            onClick={() => setHint(hint === key ? null : key)}
+                            aria-label="這題是什麼意思"
+                            aria-expanded={hint === key}
+                            className={
+                              "mt-0.5 shrink-0 rounded-full " +
+                              (hint === key ? "text-brand-600" : "text-slate-500 hover:text-brand-600")
+                            }
+                          >
+                            <CircleHelp aria-hidden className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      {plain && hint === key && (
+                        <p className="mt-1 ml-6 rounded-md bg-slate-100 px-2 py-1.5 text-xs text-slate-600">{plain.hint}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {results.length > 0 && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
+                <h3 className="font-semibold text-slate-900">今天的客人</h3>
+                <ul className="mt-2 space-y-1.5">
+                  {results.map((r) => (
+                    <li key={r.id}>
                       <button
-                        onClick={() => setConfig({ ...config, [g.condition!]: true })}
-                        className="mt-1 text-xs text-brand-600 hover:underline"
+                        onClick={() => setSelected(r.id)}
+                        className={
+                          "flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left " +
+                          (current?.id === r.id ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:bg-slate-50")
+                        }
                       >
-                        假設已補上「{state.conditions[g.condition]}」
+                        <span className="min-w-0">
+                          <span className="block truncate">{r.title}</span>
+                          <span className="text-xs font-medium text-slate-600">{r.scenario}</span>
+                        </span>
+                        <span className={"shrink-0 rounded-full px-2 py-0.5 text-xs " + VERDICT[r.disposition].chip}>
+                          {VERDICT[r.disposition].label}
+                        </span>
                       </button>
-                    )}
-                    {!g.condition && (
-                      <Link href={`/projects/${id}${g.type === "流程缺口" ? "" : "/allocate"}`} className="mt-1 block text-xs text-brand-600 hover:underline">
-                        {g.type === "流程缺口" ? "回流程建模調整 →" : "回去調整分工 →"}
-                      </Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
-          </aside>
-        )}
+
+            <details className="group rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <summary className="flex items-center gap-1 px-4 py-3 text-sm font-semibold text-slate-900">
+                <ChevronDown aria-hidden className="h-4 w-4 transition-transform group-open:rotate-180" />
+                系統會比對的政府公開資料
+              </summary>
+              <div className="border-t border-slate-100">
+                <OpenDataPanel />
+              </div>
+            </details>
+          </div>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            {current ? (
+              <>
+                <h3 className="mb-4 font-semibold text-slate-900">
+                  「{current.title}」的客人，是怎麼被處理的？
+                </h3>
+                <CaseStory
+                  result={current}
+                  nodes={project.flow.nodes}
+                  conditionLabel={(k) => PLAIN_CONDITION[k]?.label ?? state.conditions[k]}
+                />
+              </>
+            ) : (
+              <p className="py-16 text-center text-slate-500">按「開始模擬一天」，這裡會一步一步顯示每位客人被處理的過程。</p>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   );

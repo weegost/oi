@@ -2,13 +2,13 @@ import type { Flow, FlowNode, Gap } from "./types";
 
 // 與 backend/app/flow.py 的 find_gaps 相同規則；前端即時計算，讓編輯後立刻看到缺口變化
 const LABELS: Record<string, string> = {
-  role: "負責角色",
-  data: "需要的資料",
-  condition: "判斷條件",
-  branches: "判斷後的分支",
-  exceptions: "例外處理",
-  connection: "前後步驟",
-  start_end: "流程起點與終點",
+  role: "誰負責",
+  data: "需要哪些資料",
+  condition: "怎麼判斷",
+  branches: "判斷後的兩條路",
+  exceptions: "例外狀況怎麼處理",
+  connection: "接上前後步驟",
+  start_end: "開始和結束",
 };
 
 const TASK_KINDS = new Set(["process", "wait", "decision", "handoff"]);

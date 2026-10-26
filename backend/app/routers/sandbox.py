@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..auth import check_project_access
 from ..db import get_db
 from ..sandbox import engine, service
 from ..sandbox.scenarios import SCENARIOS
 from .projects import _load
 
-router = APIRouter(prefix="/api/projects/{project_id}/sandbox", tags=["sandbox"])
+router = APIRouter(prefix="/api/projects/{project_id}/sandbox", tags=["sandbox"], dependencies=[Depends(check_project_access)])
 
 
 class RunRequest(BaseModel):

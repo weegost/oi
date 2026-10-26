@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AccountMenu from "@/components/AccountMenu";
 import BrandMark from "@/components/BrandMark";
 import StageNav from "@/components/StageNav";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -18,6 +19,7 @@ export default function ProjectHeader({ project, stage }: { project: Project; st
       </div>
       <div className="flex items-center gap-3">
         <StageNav current={stage} projectId={project.id} />
+        <AccountMenu />
         <ThemeToggle />
       </div>
     </header>

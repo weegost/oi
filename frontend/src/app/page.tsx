@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Store } from "lucide-react";
+import AccountMenu from "@/components/AccountMenu";
 import BrandMark from "@/components/BrandMark";
 import CompanyCard from "@/components/CompanyCard";
 import ProjectForm from "@/components/ProjectForm";
@@ -18,6 +19,7 @@ export default function Home() {
   const [company, setCompany] = useState<Company | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [noTaxId, setNoTaxId] = useState(false); // 不查統編，直接開始
 
   const lookup = async (id: string) => {
     setTaxId(id);
@@ -27,6 +29,7 @@ export default function Home() {
     }
     setLoading(true);
     setError(null);
+    setNoTaxId(false);
     try {
       setCompany(await apiGet<Company>(`/api/companies/${id}`));
     } catch (e) {
@@ -42,7 +45,10 @@ export default function Home() {
       <header className="rounded-3xl border border-brand-100 bg-brand-50 p-6 sm:p-8">
         <div className="flex items-center justify-between">
           <BrandMark />
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <AccountMenu />
+            <ThemeToggle />
+          </div>
         </div>
         <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">中小企業 AI 導入探索</h1>
         <p className="mt-2 max-w-2xl text-slate-600">
@@ -90,6 +96,18 @@ export default function Home() {
           >
             使用示範案例「小名 3C 網店」
           </button>
+          <span className="mx-2 text-slate-300">|</span>
+          <button
+            type="button"
+            onClick={() => {
+              setCompany(null);
+              setError(null);
+              setNoTaxId(true);
+            }}
+            className="font-medium text-brand-600 hover:underline"
+          >
+            沒有統編，直接開始
+          </button>
         </p>
         {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       </section>
@@ -98,6 +116,11 @@ export default function Home() {
         <div className="mt-6 space-y-4">
           <CompanyCard company={company} />
           <ProjectForm company={company} />
+        </div>
+      )}
+      {!company && noTaxId && (
+        <div className="mt-6">
+          <ProjectForm company={null} />
         </div>
       )}
     </main>

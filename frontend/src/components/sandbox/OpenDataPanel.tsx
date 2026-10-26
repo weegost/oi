@@ -21,7 +21,7 @@ export default function OpenDataPanel() {
     }
   };
 
-  if (!data) return <p className="p-4 text-xs text-slate-400">開放資料載入中…</p>;
+  if (!data) return <p className="p-4 text-xs text-slate-500">開放資料載入中…</p>;
 
   const online = data.penalty_channels["網路"] ?? 0;
   const total = Object.values(data.penalty_channels).reduce((a, b) => a + b, 0);
@@ -57,7 +57,7 @@ export default function OpenDataPanel() {
           <p className="mt-0.5">
             {data.penalty_top_categories.slice(0, 5).map((c) => `${c.category} ${c.count}`).join("、")}
           </p>
-          <p className="mt-1.5 text-slate-400">官方只保留近一個月，系統每天自動同步並累積。</p>
+          <p className="mt-1.5 text-slate-500">官方只保留近一個月，系統每天自動同步並累積。</p>
         </div>
       )}
     </section>

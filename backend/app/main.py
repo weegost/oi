@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from . import llm, models, opendata  # noqa: F401  models 需先載入，create_all 才會建表
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
+from . import auth
 from .routers import companies, documents, mock, projects, report, sandbox
 from .routers import opendata as opendata_router
 
@@ -24,6 +25,10 @@ with engine.begin() as conn:
     conn.execute(text("alter table projects add column if not exists allocations jsonb not null default '{}'"))
     conn.execute(text("alter table projects add column if not exists sandbox jsonb not null default '{}'"))
     conn.execute(text("alter table projects add column if not exists report jsonb not null default '{}'"))
+    conn.execute(
+        text("alter table projects add column if not exists account_id integer references accounts(id) on delete set null")
+    )
+    conn.execute(text("create index if not exists ix_projects_account_id on projects (account_id)"))
 
 log = logging.getLogger("bizpilot")
 
@@ -53,6 +58,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="BizPilot AI API", lifespan=lifespan)
+app.include_router(auth.router)
 app.include_router(companies.router)
 app.include_router(documents.router)
 app.include_router(projects.router)
@@ -63,6 +69,7 @@ app.include_router(mock.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_credentials=True,  # 登入 cookie 要隨請求送出
     allow_methods=["*"],
     allow_headers=["*"],
 )

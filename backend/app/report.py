@@ -10,6 +10,13 @@ from .flow import Flow
 from .models import Company, Project
 from .sandbox import engine as sandbox
 
+SYSTEM_NAME = "智行進業 BizPilot AI"
+DISCLAIMER = (
+    "免責聲明：本報告由智行進業 BizPilot AI 依企業提供的資訊與 AI 分析自動產生，僅供 AI 導入規劃與溝通參考，"
+    "不構成法律、財務或技術上的保證。AI 產生的建議可能不完整或有誤，正式導入前請由企業與專業顧問確認。"
+    "情境測試使用模擬系統與虛構案例，未連接企業真實系統，也不會實際退款或開通權限。"
+)
+
 
 def _chosen_option(alloc: dict) -> dict | None:
     exp = alloc.get("exploration")
@@ -59,6 +66,7 @@ def build(p: Project, company: Company) -> dict:
         allocation_rows.append(
             {
                 "step": n.title,
+                "role": n.role,
                 "mode": MODES[mode],
                 "recommended": MODES[exp["recommended"]] if exp else None,
                 "ai_tasks": exp.get("ai_tasks", []) if mode != "human" else [],
@@ -118,12 +126,15 @@ def build(p: Project, company: Company) -> dict:
 
     ai_steps = [r for r in allocation_rows if r["mode"] != MODES["human"]]
     return {
+        "system": SYSTEM_NAME,
+        "disclaimer": DISCLAIMER,
         "title": f"{company.name} AI 導入需求草案",
         "generated_on": date.today().isoformat(),
         "overview": {
             "company": company.name,
             "tax_id": company.tax_id,
             "is_demo": company.registration_type == "demo",
+            "has_tax_id": company.registration_type != "manual",  # 不查統編、自填公司名稱時為 False
             "industry": (company.industry or {}).get("label", ""),
             "project": p.name,
             "work": p.work,
@@ -165,78 +176,81 @@ def build(p: Project, company: Company) -> dict:
 KIND_LABEL = {"process": "工作", "wait": "等待", "decision": "判斷", "handoff": "人工接管"}
 
 
-def to_markdown(r: dict) -> str:
+def _human_side(a: dict) -> str:
+    if a["human_does"]:
+        return a["human_does"]
+    return f"由{a['role'] or '負責人'}處理" if a["mode"] == MODES["human"] else ""
+
+
+def _body_markdown(r: dict) -> str:
+    """報告本文（不含頁首系統名稱與頁尾免責聲明）。"""
     o = r["overview"]
     t = r["testing"]
-    L = [f"# {r['title']}", "", f"產出日期：{r['generated_on']}　｜　由智行進業 BizPilot AI 產生，供顧問諮詢、工具採購或系統開發溝通使用", ""]
-    if r["ai_summary"]:
-        L += ["## 摘要（AI 撰寫，請企業確認）", "", r["ai_summary"], ""]
+    L = [f"# {r['title']}", ""]
     L += [
         "## 1. 專案概要",
         "",
-        f"- 企業：{o['company']}（{'案例代碼' if o['is_demo'] else '統一編號'} {o['tax_id']}）",
+        f"- 專案名稱：{o['project']}",
+        f"- 企業：{o['company']}" + (f"（{'案例代碼' if o['is_demo'] else '統一編號'} {o['tax_id']}）" if o["has_tax_id"] else ""),
         f"- 產業：{o['industry']}",
-        f"- 改善專案：{o['project']}",
-        f"- 想改善的工作：{o['work']}",
-        f"- 目前問題：{o['problem']}",
-        f"- 分析範圍：{o['scope']}",
+        f"- 產出日期：{r['generated_on']}",
         f"- 規模：{o['stats']['steps']} 個工作步驟，其中 {o['stats']['ai_steps']} 步規劃 AI 介入",
     ]
     if o["documents"]:
-        L.append(f"- 分析參考的企業文件：{'、'.join(o['documents'])}")
+        L.append(f"- 參考的企業文件：{'、'.join(o['documents'])}")
     L += [
         "",
-        "## 2. 現況工作流程",
+        "## 2. 專案摘要",
+        "",
+        f"- 想改善的工作：{o['work']}",
+        f"- 目前問題：{o['problem']}",
+    ]
+    if r["ai_summary"]:
+        L += ["", "### AI 摘要（AI 撰寫，請企業確認）", "", r["ai_summary"]]
+
+    L += ["", "## 3. 人力與 AI 分配", "", "| 步驟 | 分工方式 | AI 負責 | 人員負責 |", "|---|---|---|---|"]
+    for a in r["allocations"]:
+        L.append(f"| {a['step']} | {a['mode']} | {a['ai_does']} | {_human_side(a)} |")
+    if r["handoffs"]:
+        L += ["", "需轉由人工處理的情況："] + [f"- {x}" for x in r["handoffs"]]
+
+    L += [
+        "",
+        "## 4. 現行工作流程",
         "",
         "| # | 步驟 | 類型 | 負責角色 | 使用系統 | 需要的資料 | 確認狀態 |",
         "|---|---|---|---|---|---|---|",
     ]
     for i, s in enumerate(r["steps"], 1):
         L.append(f"| {i} | {s['title']} | {KIND_LABEL.get(s['kind'], s['kind'])} | {s['role']} | {s['system']} | {s['data']} | {s['status']} |")
-    L += ["", "## 3. 人機分工與 AI 任務", ""]
-    human = [a["step"] for a in r["allocations"] if a["mode"] == MODES["human"]]
-    for a in [a for a in r["allocations"] if a["mode"] != MODES["human"]]:
-        L.append(f"### {a['step']}：{a['mode']}" + (f"（AI 建議：{a['recommended']}）" if a["recommended"] and a["recommended"] != a["mode"] else ""))
-        L.append(f"- AI 做什麼：{a['ai_does']}")
-        if a["human_does"]:
-            L.append(f"- 人做什麼：{a['human_does']}")
-        if a["ai_tasks"]:
-            L.append(f"- AI 任務：{'；'.join(a['ai_tasks'])}")
-        if a["goal"]:
-            L.append(f"- 改善目標：{a['goal']}")
-        if a["risk"]:
-            L.append(f"- 主要風險：{a['risk']}")
-        L.append("")
-    if human:
-        L += [f"維持人工執行：{'、'.join(human)}", ""]
-    L += ["## 4. 所需資料與系統", ""]
-    L += [f"- 資料：{x}" for x in r["data"]] or ["- （尚無 AI 分工）"]
-    L += [f"- 系統：{x}" for x in r["systems"]]
-    L += ["", "## 5. 操作權限", ""]
+
+    L += ["", "## 5. AI 所需資料", ""]
+    L += [f"- {x}" for x in r["data"]] or ["- （尚無 AI 分工）"]
+    if r["systems"]:
+        L += ["", f"需介接的系統：{'、'.join(r['systems'])}"]
+    L += ["", "## 6. AI 操作權限", ""]
     L += [f"- {x}" for x in r["permissions"]] or ["- （尚無 AI 分工）"]
-    L += ["", "## 6. 人工接管方式", ""]
-    L += [f"- {x}" for x in r["handoffs"]] or ["- （尚未定義）"]
-    L += ["", "## 7. 情境沙盒測試", ""]
+
+    L += ["", "## 7. 主要風險", ""]
+    step_risks = [a for a in r["allocations"] if a["risk"]]
+    if step_risks:
+        L += ["### 各步驟的風險", ""] + [f"- {a['step']}（{a['mode']}）：{a['risk']}" for a in step_risks] + [""]
+    L += ["### 導入前需補足的條件", ""]
     if not t["tested"]:
-        L.append("尚未執行情境測試。")
-    else:
-        L.append(f"第 {t['run']} 次測試" + ("（流程或分工已變更，結果可能過期）" if t["stale"] else ""))
-        L.append("")
-        L.append(f"- 假設已具備：{'、'.join(t['assumed']) or '無'}")
-        L.append(f"- 尚未具備：{'、'.join(t['not_ready']) or '無'}")
-        L += ["", "| 情境 | 案例 | 結果 | 風險 |", "|---|---|---|---|"]
-        for c in t["cases"]:
-            L.append(f"| {c['scenario']} | {c['title']} | {c['disposition']} | {'；'.join(c['risks'])} |")
-        if t["evidence"]:
-            L += ["", "政府開放資料比對："] + [f"- {e}" for e in t["evidence"]]
-    L += ["", "## 8. 導入缺口", ""]
+        L.append("- 尚未執行情境沙盒測試，導入條件還沒有經過驗證。")
     for g in r["gaps"]:
-        L.append(f"- **{g['type']}**：{g['issue']} 建議：{g['action']}（影響 {len(g['cases'])} 個案例）")
-    if not r["gaps"]:
-        L.append("- 目前測試中沒有發現缺口。")
-    L += ["", "## 9. 尚待確認事項", ""] + [f"- [ ] {x}" for x in r["todo"]]
-    L += ["", "---", "", "本草案中的測試以模擬系統與虛構案例進行，未連接企業真實系統，也不會實際退款或開通權限。"]
+        L.append(f"- **{g['type']}**：{g['issue']} 建議：{g['action']}（影響 {len(g['cases'])} 個測試案例）")
+    if t["tested"] and not r["gaps"]:
+        L.append("- 情境測試中沒有發現缺口。")
+    # 缺口已在上面列出；其餘待確認事項（未確認步驟、沙盒假設等）放在這裡
+    pending = [x for x in r["todo"] if not x.startswith("[") and x != "尚未執行情境沙盒測試。"]
+    if pending:
+        L += ["", "### 尚待確認", ""] + [f"- {x}" for x in pending]
     return "\n".join(L)
+
+
+def to_markdown(r: dict) -> str:
+    return "\n".join([f"> {r['system']}｜AI 導入需求草案", "", _body_markdown(r), "", "---", "", r["disclaimer"]])
 
 
 def to_docx(r: dict) -> bytes:
@@ -271,7 +285,14 @@ def to_docx(r: dict) -> bytes:
                 cell.text = text
         table_rows.clear()
 
-    for line in to_markdown(r).splitlines():
+    # 頁首放系統名稱、頁尾放免責聲明，每一頁都會出現
+    section = doc.sections[0]
+    section.header.paragraphs[0].text = f"{r['system']}｜AI 導入需求草案"
+    footer = section.footer.paragraphs[0]
+    footer.text = r["disclaimer"]
+    footer.runs[0].font.size = Pt(8)
+
+    for line in _body_markdown(r).splitlines():
         if line.startswith("|"):
             cells = [c.strip() for c in line.strip("|").split("|")]
             if not all(set(c) <= {"-"} for c in cells):
