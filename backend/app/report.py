@@ -5,6 +5,8 @@
 
 from datetime import date
 
+from pydantic import BaseModel
+
 from .allocation import MODES
 from .flow import Flow
 from .models import Company, Project
@@ -74,6 +76,8 @@ def build(p: Project, company: Company) -> dict:
                 "ai_does": opt["ai_does"] if opt else ("不使用 AI" if mode == "human" else "尚未分析"),
                 "human_does": opt["human_does"] if opt else "",
                 "risk": opt["risk"] if opt and mode != "human" else "",
+                # 這一步交給人處理的情況，報告重點區當作風險的對策
+                "handoff": opt["handoff"] if opt and mode != "human" else [],
                 "explored": bool(exp),
             }
         )
@@ -168,6 +172,8 @@ def build(p: Project, company: Company) -> dict:
         "gaps": gaps,
         "todo": todo,
         "ai_summary": (p.report or {}).get("summary"),
+        # 重點區的短句（AI 撰寫，與摘要一起產生）；還沒產生時為 None
+        "ai_brief": (p.report or {}).get("brief"),
     }
 
 
@@ -336,3 +342,32 @@ def ai_summary(r: dict) -> str:
 只輸出摘要段落，不要標題。"""
     text, _ = llm.generate(prompt, system=SUMMARY_SYSTEM)
     return text.strip()
+
+
+class BriefStep(BaseModel):
+    step: str  # 步驟名稱，照草案原文
+    text: str  # AI 在這一步做什麼，白話短句
+
+
+class Brief(BaseModel):
+    """草案最上面「重點」用的短句：AI 做什麼、哪些留給人。"""
+
+    ai: list[BriefStep]
+    human: str
+
+
+def ai_brief(r: dict) -> dict:
+    from . import llm
+
+    ai_steps = [a["step"] for a in r["allocations"] if a["mode"] != MODES["human"]]
+    prompt = f"""以下是 AI 導入需求草案（Markdown）：
+
+{to_markdown({**r, "ai_summary": None})}
+
+請替老闆寫兩個問題的白話回答，不要用「介接、權限、節點」這類術語：
+1. ai：「AI 會幫我們做什麼？」依序對這些步驟各寫一句，每句 20 字以內，只寫 AI 實際做的事：{"、".join(ai_steps) or "（無）"}
+   step 欄位照抄步驟名稱。
+2. human：「哪些還是要人來？」一句話，40 字以內，說明哪些步驟由誰負責，以及什麼情況 AI 一定交給人。"""
+    brief = llm.generate_json(prompt, Brief, system=SUMMARY_SYSTEM)
+    # 只保留草案裡真的有、而且有 AI 參與的步驟，避免 AI 自己多寫
+    return {"ai": [s.model_dump() for s in brief.ai if s.step in ai_steps], "human": brief.human.strip()}

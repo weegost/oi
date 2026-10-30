@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智行進業 BizPilot AI｜幫小公司看懂 AI 能做什麼</title>
+<meta name="description" content="把你每天怎麼做事說出來，我們幫你整理成流程，並告訴你 AI 能幫哪一步。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #faf6ef;
+    --card: #ffffff;
+    --ink: #20332d;
+    --muted: #55645e;
+    --line: #e4dccd;
+    --green: #2f6b57;
+    --green-soft: #e1eee8;
+    --cta: #b8470d;
+    --cta-hover: #9a3a08;
+    --note: #fff3c4;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.8 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible { outline: 3px solid var(--green); outline-offset: 3px; border-radius: 6px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+  .serif { font-family: "Noto Serif TC", "PMingLiU", serif; }
+
+  .nav .wrap { height: 72px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 700; font-size: 20px; }
+  .logo small { margin-left: 8px; font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: .06em; }
+  .nav-actions { display: flex; align-items: center; gap: 6px; }
+  .link { min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; font-weight: 500; border-radius: 8px; }
+  .link:hover { background: var(--green-soft); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 56px; padding: 0 32px; border-radius: 999px; font-weight: 700; font-size: 18px; border: 2px solid var(--cta); cursor: pointer; transition: background-color .2s, color .2s; }
+  .btn-main { background: var(--cta); color: #fff; }
+  .btn-main:hover { background: var(--cta-hover); border-color: var(--cta-hover); }
+  .btn-sub { color: var(--cta); background: transparent; }
+  .btn-sub:hover { background: var(--note); }
+  .btn-sm { min-height: 48px; padding: 0 22px; font-size: 17px; }
+  .logo, .link, .btn { white-space: nowrap; }
+  @media (max-width: 480px) { .logo small { display: none; } .nav-actions { gap: 2px; } .btn-sm { padding: 0 16px; } .link { padding: 0 10px; } }
+
+  /* hero */
+  .hero { padding: 48px 0 72px; }
+  .hero .wrap { display: grid; gap: 48px; align-items: center; }
+  @media (min-width: 900px) { .hero { padding: 80px 0 104px; } .hero .wrap { grid-template-columns: 1.1fr .9fr; gap: 64px; } }
+  .eyebrow { display: inline-block; font-weight: 700; font-size: 17px; color: var(--green); }
+  h1 { margin: 12px 0 0; font-family: "Noto Serif TC", serif; font-size: clamp(32px, 5.6vw, 52px); line-height: 1.3; font-weight: 900; }
+  .lead { margin: 20px 0 0; color: var(--muted); font-size: clamp(18px, 2.4vw, 21px); max-width: 28em; }
+  .cta { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .small { margin: 16px 0 0; font-size: 16px; color: var(--muted); }
+  .small a { color: var(--green); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 12px 4px; }
+
+  /* illustration: boss says → flow */
+  .pic { position: relative; display: grid; gap: 14px; }
+  .say { background: var(--note); border-radius: 18px 18px 18px 4px; padding: 16px 18px; font-size: 17px; max-width: 92%; box-shadow: 0 2px 0 rgba(0,0,0,.06); }
+  .say small { display: block; font-size: 14px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+  .arrow { justify-self: center; color: var(--green); }
+  .flowcard { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+  .flowcard h3 { margin: 0 0 12px; font-size: 16px; color: var(--muted); font-weight: 700; }
+  .flowrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .step { padding: 8px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 16px; font-weight: 500; }
+  .step.ai { background: var(--green-soft); border-color: transparent; color: var(--green); font-weight: 700; }
+  .flowrow i { color: var(--muted); font-style: normal; }
+  .legend { margin: 12px 0 0; font-size: 15px; color: var(--muted); }
+  .legend b { color: var(--green); }
+
+  /* how */
+  section { padding: 72px 0; }
+  h2 { margin: 0; font-family: "Noto Serif TC", serif; font-size: clamp(24px, 3.6vw, 34px); font-weight: 900; line-height: 1.4; }
+  .how { background: var(--card); border-block: 1px solid var(--line); }
+  .how .head { margin-bottom: 36px; }
+  .how .head p { margin: 8px 0 0; color: var(--muted); }
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  @media (min-width: 860px) { .list { grid-template-columns: repeat(5, 1fr); } }
+  .list li { background: var(--bg); border-radius: 16px; padding: 18px; }
+  .list b { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--green); color: var(--bg); font-size: 15px; margin-bottom: 10px; }
+  .list h3 { margin: 0 0 4px; font-size: 20px; }
+  .list p { margin: 0; font-size: 16px; color: var(--muted); line-height: 1.7; }
+
+  /* end */
+  .end { text-align: center; }
+  .end p { margin: 10px 0 0; color: var(--muted); }
+  .end .cta { justify-content: center; }
+  footer { padding: 24px 0 40px; font-size: 15px; color: var(--muted); text-align: center; }
+  .reveal { opacity: 0; transform: translateY(10px); transition: opacity .4s ease-out, transform .4s ease-out; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } .btn { transition: none; } }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="智行進業 BizPilot AI 首頁">智行進業<small>BizPilot AI</small></a>
+    <div class="nav-actions">
+      <a class="link" href="http://localhost:3000/login">登入</a>
+      <a class="btn btn-main btn-sm" href="http://localhost:3000/login">註冊</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow">幫小公司看懂 AI 能做什麼</span>
+        <h1>你怎麼做事，說給我們聽就好</h1>
+        <p class="lead">說明你平常的工作方式，即可整理出流程，並看出哪些步驟適合交給 AI。</p>
+        <div class="cta">
+          <a class="btn btn-main" href="http://localhost:3000">直接開始，不用註冊</a>
+          <a class="btn btn-sub" href="http://localhost:3000/login">註冊，保存紀錄</a>
+        </div>
+        <p class="small">想之後再回來看專案紀錄？點擊註冊按鈕進行註冊！</p>
+      </div>
+
+      <div class="pic" role="img" aria-label="示意：老闆口述的做法被整理成流程，並標出 AI 可以幫忙的步驟">
+        <div class="say"><small>你說的</small>客人退貨，我先看有沒有過七天，再算退多少錢，最後回他訊息。</div>
+        <svg class="arrow" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M5 13l7 7 7-7"/></svg>
+        <div class="flowcard">
+          <h3>我們幫你整理成</h3>
+          <div class="flowrow">
+            <span class="step ai">確認七天內</span><i>→</i>
+            <span class="step">算退款金額</span><i>→</i>
+            <span class="step ai">回覆客人</span>
+          </div>
+          <p class="legend"><b>綠色</b>是 AI 可以幫忙的步驟，涉及金額的留給人。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="how">
+    <div class="wrap">
+      <div class="head reveal">
+        <h2>你只要回答問題，其他我們來</h2>
+        <p>每個畫面只問一個問題，依序回答即可。</p>
+      </div>
+      <ol class="list reveal">
+        <li><b>1</b><h3>告訴我們公司</h3><p>輸入統一編號，公司資料自動帶入。</p></li>
+        <li><b>2</b><h3>說說怎麼做事</h3><p>用平常的話說就好，我們幫你整理。</p></li>
+        <li><b>3</b><h3>看哪裡能省力</h3><p>每個步驟都標出誰來做比較好。</p></li>
+        <li><b>4</b><h3>先試跑看看</h3><p>用假資料試跑，提早發現問題。</p></li>
+        <li><b>5</b><h3>拿走文件</h3><p>整理成 Word 或 PDF，可以下載。</p></li>
+      </ol>
+    </div>
+  </section>
+
+</main>
+
+<footer>智行進業 BizPilot AI</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) { els.forEach(function (e) { e.classList.add('in'); }); return; }
+    var io = new IntersectionObserver(function (en) { en.forEach(function (x) { if (x.isIntersecting) { x.target.classList.add('in'); io.unobserve(x.target); } }); }, { threshold: 0.1 });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+</script>
+</body>
+</html>

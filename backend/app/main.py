@@ -11,7 +11,7 @@ from . import llm, models, opendata  # noqa: F401  models 需先載入，create_
 from .config import settings
 from .db import Base, SessionLocal, engine, get_db
 from . import auth
-from .routers import companies, documents, mock, projects, report, sandbox
+from .routers import companies, documents, mock, projects, report, sandbox, workspaces
 from .routers import opendata as opendata_router
 
 # pgvector 擴充通常由 db/init 建立；資料庫若是先前建的，在此補上
@@ -29,6 +29,12 @@ with engine.begin() as conn:
         text("alter table projects add column if not exists account_id integer references accounts(id) on delete set null")
     )
     conn.execute(text("create index if not exists ix_projects_account_id on projects (account_id)"))
+    conn.execute(
+        text("alter table projects add column if not exists workspace_id integer references workspaces(id) on delete set null")
+    )
+    conn.execute(text("create index if not exists ix_projects_workspace_id on projects (workspace_id)"))
+    # 新帳號用 Email 當帳號名稱，長度需要比舊版的 50 字元更長
+    conn.execute(text("alter table accounts alter column username type varchar(200)"))
 
 log = logging.getLogger("bizpilot")
 
@@ -61,6 +67,7 @@ app = FastAPI(title="BizPilot AI API", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(companies.router)
 app.include_router(documents.router)
+app.include_router(workspaces.router)
 app.include_router(projects.router)
 app.include_router(opendata_router.router)
 app.include_router(sandbox.router)

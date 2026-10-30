@@ -1,5 +1,5 @@
+import threading
 import time
-from functools import lru_cache
 from typing import Literal
 
 from google import genai
@@ -13,13 +13,22 @@ class LLMNotConfigured(RuntimeError):
     pass
 
 
-# Client 必須保留參照；臨時建立的 Client 被回收時會關閉連線
-@lru_cache
+# Client 必須保留參照；臨時建立的 Client 被回收時會關閉連線。
+# 多個執行緒同時第一次呼叫時（一次分析全部步驟），要用鎖確保只建立一個，
+# 否則多建的 Client 用到一半被回收，請求會失敗（client has been closed）
+_client: genai.Client | None = None
+_client_lock = threading.Lock()
+
+
 def get_client() -> genai.Client:
+    global _client
     if not settings.gemini_api_key:
         raise LLMNotConfigured("尚未設定 GEMINI_API_KEY，請在專案根目錄的 .env 填入。")
-    # 逾時單位為毫秒；避免模型忙碌時請求無限等待
-    return genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=30_000))
+    with _client_lock:
+        if _client is None:
+            # 逾時單位為毫秒；避免模型忙碌時請求無限等待
+            _client = genai.Client(api_key=settings.gemini_api_key, http_options=types.HttpOptions(timeout=30_000))
+        return _client
 
 
 RETRYABLE = {429, 500, 503, 504}

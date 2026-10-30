@@ -28,8 +28,8 @@ export function findGaps(flow: Flow): Gap[] {
   const outgoing = new Map<string, number>();
   flow.edges.forEach((e) => outgoing.set(e.source, (outgoing.get(e.source) ?? 0) + 1));
 
+  // 已確認的步驟一樣檢查：確認只代表企業同意這一步存在，缺的資訊仍要列出來
   for (const n of tasks) {
-    if (n.status === "confirmed") continue;
     if (!linked.has(n.id)) add(n, "connection");
     if (!n.role.trim() && n.kind !== "wait") add(n, "role");
     if (n.kind === "decision") {

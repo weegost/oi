@@ -45,14 +45,16 @@ def download_docx(project_id: int, db: Session = Depends(get_db)):
 
 @router.post("/summary")
 def write_summary(project_id: int, db: Session = Depends(get_db)):
-    """請 AI 依草案內容寫一段摘要（選用）。"""
+    """請 AI 依草案內容寫一段摘要，並寫重點區「AI 做什麼、哪些留給人」的短句（選用）。"""
     p, company = _load(db, project_id)
     try:
-        text = report.ai_summary(report.build(p, company))
+        r = report.build(p, company)
+        text = report.ai_summary(r)
+        brief = report.ai_brief(r)
     except llm.LLMNotConfigured as e:
         raise HTTPException(503, str(e))
     except Exception as e:
         raise HTTPException(502, f"AI 暫時無法回應，請稍後再試。（{type(e).__name__}）")
-    p.report = {"summary": text, "generated_at": datetime.now(timezone.utc).isoformat()}
+    p.report = {"summary": text, "brief": brief, "generated_at": datetime.now(timezone.utc).isoformat()}
     db.commit()
     return report.build(p, company)

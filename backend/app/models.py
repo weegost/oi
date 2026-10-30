@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,15 +32,55 @@ class Company(Base):
 
 
 class Account(Base):
-    """登入帳號：一家公司共用一個帳號，登入後可以回來看之前的專案。"""
+    """個人登入帳號。新帳號以 Email 當作 username；舊版「一家公司共用一個帳號」的帳號仍可登入。"""
 
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(200), unique=True, index=True)  # 新帳號為小寫 Email
     password_hash: Mapped[str] = mapped_column(String(200))  # scrypt，格式：salt$hash（hex）
-    display_name: Mapped[str] = mapped_column(String(200), default="")  # 公司名稱
+    display_name: Mapped[str] = mapped_column(String(200), default="")  # 顯示姓名（舊帳號為公司名稱）
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Workspace(Base):
+    """公司工作區：以統編代表一家公司，成員共用這家公司的專案。示範公司可以建立多個。"""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tax_id: Mapped[str] = mapped_column(ForeignKey("companies.tax_id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")  # 補充登記資料以外的實際業務
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkspaceMember(Base):
+    """工作區成員；role 為 ADMIN（可邀請同事）或 MEMBER。"""
+
+    __tablename__ = "workspace_members"
+    __table_args__ = (UniqueConstraint("workspace_id", "account_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10), default="MEMBER")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkspaceInvitation(Base):
+    """站內邀請：管理者輸入同事的 Email，對方用同一個 Email 登入後在「我的工作區」接受。不會寄出郵件。"""
+
+    __tablename__ = "workspace_invitations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(200), index=True)  # 小寫
+    status: Mapped[str] = mapped_column(String(10), default="PENDING")  # PENDING／ACCEPTED／DECLINED／REVOKED
+    invited_by: Mapped[int | None] = mapped_column(ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuthToken(Base):
@@ -64,9 +104,13 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tax_id: Mapped[str] = mapped_column(ForeignKey("companies.tax_id"))
-    # 登入時建立的專案屬於該帳號，只有該帳號能看；未登入建立的為 None，不會出現在任何人的專案列表
+    # 登入時建立的專案記下建立者；未登入建立的為 None，不會出現在任何人的專案列表
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # 屬於某個公司工作區的專案，由工作區所有成員共用；沒有工作區的專案只有建立者能看
+    workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(200))
     work: Mapped[str] = mapped_column(String(200), default="")  # 想改善的工作

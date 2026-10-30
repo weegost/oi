@@ -78,6 +78,8 @@ export type DocSource = { filename: string; kind: DocKind; idx: number; text: st
 export type Project = {
   id: number;
   tax_id: string;
+  /** 所屬的公司工作區；不註冊直接使用的專案沒有 */
+  workspace_id: number | null;
   company_name: string;
   industry: Industry;
   name: string;
@@ -210,6 +212,7 @@ export type ReportData = {
     ai_does: string;
     human_does: string;
     risk: string;
+    handoff: string[]; // 這一步交給人處理的情況
     explored: boolean;
   }[];
   data: string[];
@@ -229,4 +232,33 @@ export type ReportData = {
   gaps: { type: string; issue: string; action: string; cases: string[] }[];
   todo: string[];
   ai_summary: string | null;
+  // 重點區「AI 做什麼、哪些留給人」的白話短句，和 AI 摘要一起產生；還沒產生時為 null
+  ai_brief: { ai: { step: string; text: string }[]; human: string } | null;
+};
+
+export type WorkspaceRole = "ADMIN" | "MEMBER";
+
+export type WorkspaceSummary = {
+  id: number;
+  name: string;
+  tax_id: string;
+  company_name: string;
+  description: string;
+  role: WorkspaceRole;
+  member_count: number;
+  project_count: number;
+};
+
+export type WorkspaceDetail = WorkspaceSummary & {
+  members: { account_id: number; display_name: string; email: string; role: WorkspaceRole }[];
+  invitations: { id: number; email: string; created_at: string }[]; // 只有管理者拿得到
+};
+
+/** 寄給我、還沒回覆的邀請 */
+export type Invitation = {
+  id: number;
+  workspace_id: number;
+  workspace_name: string;
+  invited_by: string;
+  created_at: string;
 };

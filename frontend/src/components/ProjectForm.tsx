@@ -13,14 +13,18 @@ const FIELDS = [
   { key: "name", label: "專案名稱", placeholder: "例如：退貨客服流程改善", required: true },
   { key: "work", label: "想改善的工作", placeholder: "例如：處理客戶退貨申請", required: true },
   { key: "problem", label: "目前遇到的問題", placeholder: "例如：客服要反覆查訂單和退貨政策，回覆很慢", multiline: true },
+  { key: "scope", label: "分析範圍", placeholder: "例如：從收到客戶訊息到回覆客戶", multiline: true },
 ] as const;
 
 type FormKey = (typeof FIELDS)[number]["key"];
 
-/** company 為 null 時代表沒查統編，改由使用者自填公司名稱（選填） */
-export default function ProjectForm({ company }: { company: Company | null }) {
+/** company 為 null 時代表沒查統編，改由使用者自填公司名稱（選填）；
+ *  workspaceId 有值時，專案建在該公司工作區，成員共用 */
+export default function ProjectForm({ company, workspaceId }: { company: Company | null; workspaceId?: number }) {
+  const demoQuery = (full: boolean) =>
+    "?" + new URLSearchParams({ ...(full && { full: "true" }), ...(workspaceId && { workspace_id: String(workspaceId) }) });
   const router = useRouter();
-  const [form, setForm] = useState<Record<FormKey, string>>({ name: "", work: "", problem: "" });
+  const [form, setForm] = useState<Record<FormKey, string>>({ name: "", work: "", problem: "", scope: "" });
   const account = useAccount();
   const [companyName, setCompanyName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,7 +56,9 @@ export default function ProjectForm({ company }: { company: Company | null }) {
             apiSend<Project>(
               "POST",
               "/api/projects",
-              company
+              workspaceId
+                ? { workspace_id: workspaceId, ...form }
+                : company
                 ? { tax_id: company.tax_id, ...form }
                 : { company_name: companyName || account?.display_name || "", ...form },
             ),
@@ -103,7 +109,7 @@ export default function ProjectForm({ company }: { company: Company | null }) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => go(() => apiSend<Project>("POST", "/api/projects/demo"))}
+                onClick={() => go(() => apiSend<Project>("POST", "/api/projects/demo" + demoQuery(false)))}
                 className="rounded-lg border border-brand-200 px-4 py-2.5 font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-60"
                 title="從第一階段開始，現場示範 AI 引導補齊流程"
               >
@@ -112,7 +118,7 @@ export default function ProjectForm({ company }: { company: Company | null }) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => go(() => apiSend<Project>("POST", "/api/projects/demo?full=true"))}
+                onClick={() => go(() => apiSend<Project>("POST", "/api/projects/demo" + demoQuery(true)))}
                 className="rounded-lg border border-brand-200 px-4 py-2.5 font-medium text-brand-700 hover:bg-brand-50 disabled:opacity-60"
                 title="四個階段都已完成，含預存的 AI 分析與摘要，不需等待 AI"
               >

@@ -3,7 +3,7 @@
 retrieve → update_flow → check_gaps → respond
 - retrieve：依企業這次說的內容（或下一個要追問的缺口）檢索企業文件，供後續步驟參考並回報來源。
 - 直接描述（direct）：依企業描述更新流程，簡短回報仍缺的資訊，不主動追問。
-- AI 引導（guided）：更新流程後，挑出最重要的一個缺口，從最近一次實際案例切入追問。
+- AI 引導（guided）：只記錄企業說過的內容，不推算；照順序一題一題問，先問「接下來呢」把流程走完，再問每一步缺的資訊。
 """
 
 import json
@@ -22,11 +22,14 @@ Mode = Literal["direct", "guided"]
 SYSTEM = """你是「智行進業」的流程建模助理，協助台灣中小企業把日常工作整理成流程圖。
 原則：
 - 只記錄企業「目前實際怎麼做」，不要提出 AI 導入建議，也不要美化流程。
-- 企業沒說的細節不要編造；可以合理推論的寫進節點，但 source 標為「AI 推論」，企業明確說過的標為「企業描述」。
+- 只寫企業明確說過的內容，不要推算或補完：企業沒說的步驟、負責人、系統、資料、判斷條件、例外處理一律留空，之後再一題一題問。
 - 使用繁體中文，用企業聽得懂的話，不用流程分析術語。
-- 企業文件寫的是「規定」，企業描述的是「實際做法」；兩者不同時以企業描述為準，文件只用來補充細節。"""
+- 企業文件寫的是「規定」，企業描述的是「實際做法」；文件只用來決定要問什麼，不要把文件內容直接填進流程。"""
 
 Retriever = Callable[[str], list[dict]]  # 查詢文字 → 文件段落
+
+# 企業確認過的節點仍可由 AI 補上空白的這些欄位
+FILLABLE = ("role", "system", "data", "condition", "description", "output", "exceptions")
 
 
 class LLMNode(BaseModel):
@@ -74,13 +77,16 @@ def _history_text(state: AgentState, limit: int = 8) -> str:
 
 
 def merge_flow(old: Flow, update: FlowUpdate) -> Flow:
-    """保留企業已確認的節點與畫布位置；其餘以模型更新為準。"""
+    """保留企業已確認的節點與畫布位置；其餘以模型更新為準。
+    已確認的節點不改名稱與已填內容，但企業後來補充的資訊可以填進原本空白的欄位，
+    否則 AI 追問的答案存不進去，同一題會一直被問。"""
     old_by_id = {n.id: n for n in old.nodes}
     nodes = []
     for n in update.nodes:
         prev = old_by_id.get(n.id)
         if prev and prev.status == "confirmed":
-            nodes.append(prev)
+            blanks = {f: getattr(n, f) for f in FILLABLE if not getattr(prev, f).strip() and getattr(n, f).strip()}
+            nodes.append(prev.model_copy(update=blanks))
             continue
         data = n.model_dump()
         if prev:
@@ -134,12 +140,14 @@ def update_flow(state: AgentState) -> AgentState:
 
 請依企業剛剛說的內容，輸出「完整」更新後的流程：
 - 保留仍然正確的節點與 id；企業這次沒提到的節點與欄位一律原樣保留，不要改寫。
-- 只修改或補充企業這次提到的內容；新增步驟給新 id；企業說某步驟不存在才刪除。
-- 第一個節點 kind=start，最後一個 kind=end；有判斷就用 decision，並用 edges 的 label 標出分支（例如「是」「否」）。
+- 只把企業這次「明確說出」的內容寫進流程：新增步驟給新 id；企業說某步驟不存在才刪除。
+- 不要推算：企業沒說的步驟、分支、負責人、系統、資料、判斷條件都不要自己補，欄位留空即可。
+  不要為了讓流程看起來完整而自行加上後續步驟或結束。
+- 企業說了工作怎麼開始，才加 kind=start 的節點；企業明確說這件事到哪裡就結束了，才加 kind=end 的節點。
+- 企業說到「如果…就…」這類判斷時用 decision，並用 edges 的 label 標出企業說的分支（例如「是」「否」）。
 - 交由特定人員處理例外的步驟用 handoff；等待客戶或外部回覆用 wait。
-- edges 依實際順序連接。
-- 企業文件中與這次內容相關的規定（例如期限、條件、例外處理），可補進對應節點的 condition、data、exceptions；
-  主要依據文件補充的節點 source 標「文件」。不要因為文件提到就新增企業沒說過的步驟。"""
+- edges 依企業說的順序連接。
+- 企業文件只用來理解企業說的話，不要把文件裡的規定填進節點；所有節點的 source 填「企業描述」。"""
     update = llm.generate_json(prompt, FlowUpdate, system=SYSTEM)
     flow = merge_flow(current, update)
     return {"flow": flow.model_dump(), "reply": update.summary}
@@ -147,6 +155,32 @@ def update_flow(state: AgentState) -> AgentState:
 
 def check_gaps(state: AgentState) -> AgentState:
     return {"gaps": find_gaps(Flow.model_validate(state["flow"]))}
+
+
+def _open_end(flow: Flow) -> FlowNode | None:
+    """流程還沒走到結束的地方：沒有下一步、也不是結束的節點（取最後一個）。"""
+    has_next = {e.source for e in flow.edges}
+    open_nodes = [n for n in flow.nodes if n.kind != "end" and n.id not in has_next]
+    return open_nodes[-1] if open_nodes else None
+
+
+def _gap_target(flow: Flow, g: dict) -> str:
+    """把缺口寫成具體要問的事。只給欄位名稱（例如「判斷後的分支」）時，模型常誤問成「怎麼判斷」，
+    企業回答了缺口卻沒補上，同一題就一直重問。"""
+    step = f"「{g['node_title']}」這一步"
+    if g["field"] == "branches":
+        known = [e.label for e in flow.edges if e.source == g["node_id"] and e.label]
+        have = f"已經知道「{'、'.join(known)}」之後怎麼做" if known else "還不知道判斷完之後怎麼走"
+        return f"{step}{have}；問另一種情況（例如不符合時）接下來是誰做什麼。判斷條件已經知道，不要再問怎麼判斷"
+    asks = {
+        "role": f"{step}是誰做的",
+        "data": f"做{step}時要看或用到哪些資料",
+        "condition": f"{step}是看什麼來判斷",
+        "connection": f"{step}的前一步或下一步是什麼",
+        "exceptions": "遇到特殊、處理不了的情況時，交給誰處理",
+        "start_end": "這件事從哪裡開始、做到哪裡算結束",
+    }
+    return asks.get(g["field"], f"補齊{step}的{g['label']}")
 
 
 def respond(state: AgentState) -> AgentState:
@@ -165,15 +199,17 @@ def respond(state: AgentState) -> AgentState:
         )
         return {"reply": f"{summary}\n\n{tail}".strip()}
 
-    # AI 引導
+    # AI 引導：照順序一步一步問。先把流程從頭走到尾（每次只問「接下來呢」），走完再回頭問每一步缺的資訊。
+    # 更新摘要是寫給模型的內部說明（例如「企業詢問…，流程保持不變」），不顯示給企業；流程圖改了哪裡由畫面標示
+    open_end = _open_end(flow)
     if not flow.nodes:
-        target = "請企業從「最近一次實際處理這項工作的案例」開始描述：當時誰收到什麼、接著做了什麼"
+        target = "請企業從「最近一次實際處理這項工作的案例」開始說：一開始是誰收到什麼"
+    elif open_end:
+        target = f"「{open_end.title}」做完之後，接下來是誰做什麼；如果這件事到這裡就結束了，也請企業說一聲"
     elif gaps:
-        g = gaps[0]
-        where = f"「{g['node_title']}」這一步" if g["node_title"] else "整體流程"
-        target = f"補齊{where}的{g['label']}"
+        target = _gap_target(flow, gaps[0])
     else:
-        return {"reply": f"{summary}\n\n流程資訊已大致完整，請在右側逐一確認節點；確認後就可以進入 AI 介入探索。".strip()}
+        return {"reply": "流程資訊已大致完整，請在右側逐一確認節點；確認後就可以進入 AI 介入探索。"}
 
     prompt = f"""{_context_text(state)}
 
@@ -188,10 +224,12 @@ def respond(state: AgentState) -> AgentState:
 請寫「一個」追問：
 - 用最近一次實際案例來問（例如「上次遇到…時，是誰…？」），不要問抽象的流程問題。
 - 一次只問一件事，60 字以內，口語、友善。
+- 不要在問題裡替企業猜答案，也不要先列出選項讓企業挑；讓企業用自己的話說。
+- 企業在最近對話裡已經回答過的事不要再問；如果上一題問過類似的，換個說法，直接點出還缺的那一塊。
 - 文件已經寫清楚的規定不要再問；可以改問「實際上是不是照文件做」或文件沒寫到的情況。
 - 只輸出問題本身。"""
     question, _ = llm.generate(prompt, system=SYSTEM)
-    return {"reply": f"{summary}\n\n{question.strip()}".strip()}
+    return {"reply": question.strip()}
 
 
 def build_graph():

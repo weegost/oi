@@ -1,15 +1,16 @@
-import { Workflow } from "lucide-react";
+import Image from "next/image";
+import styles from "./BrandMark.module.css";
 
-/** 品牌標誌：赤陶橘底白色流程圖示＋中英文名稱 */
+/** 以原始直式 Logo 的圖示搭配可讀文字，適應橫式導覽列。 */
 export default function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
-        <Workflow aria-hidden className="h-4.5 w-4.5" />
+    <span className={`${styles.brand} ${compact ? styles.compact : ""}`}>
+      <span className={styles.symbol} aria-hidden="true">
+        <Image src="/img/logo.png" alt="" width={1402} height={1122} sizes="104px" loading="eager" className={styles.symbolImage} />
       </span>
-      <span className="leading-tight">
-        <span className="block text-sm font-bold text-slate-900">智行進業</span>
-        {!compact && <span className="block text-xs font-medium text-slate-500">BizPilot AI</span>}
+      <span className={styles.wordmark}>
+        <span className={styles.name}>智行進業</span>
+        {!compact && <span className={styles.caption}>BizPilot AI</span>}
       </span>
     </span>
   );

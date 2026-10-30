@@ -44,9 +44,9 @@ def test_decision_needs_condition_and_two_branches():
     assert ("d", "branches") in gaps
 
 
-def test_confirmed_node_is_not_asked_again():
+def test_confirmed_node_still_lists_missing_info():
     flow = Flow(nodes=[node("a", status="confirmed")], edges=[])
-    assert not any(g["node_id"] == "a" for g in find_gaps(flow))
+    assert ("a", "role") in fields(find_gaps(flow))
 
 
 def test_missing_exception_handling_is_flagged():
@@ -84,6 +84,18 @@ def test_merge_keeps_confirmed_nodes_and_positions():
     assert len(merged.edges) == 2
 
 
+def test_merge_fills_blank_fields_of_confirmed_node():
+    """已確認的步驟：空白欄位可以補上企業後來的回答，已填的內容與名稱不變。"""
+    old = Flow(nodes=[node("a", status="confirmed", role="客服")], edges=[])
+    update = agent.FlowUpdate(
+        nodes=[agent.LLMNode(id="a", kind="process", title="被改掉", role="主管", data="寄回地址")],
+        edges=[],
+        summary="",
+    )
+    a = agent.merge_flow(old, update).nodes[0]
+    assert (a.title, a.role, a.data, a.status) == ("a", "客服", "寄回地址", "confirmed")
+
+
 def fake_update(prompt, schema, system=None):
     return agent.FlowUpdate(
         nodes=[
@@ -118,6 +130,56 @@ def test_guided_mode_asks_one_question(project):
     client.post(f"/api/projects/{project}/chat", json={"mode": "direct", "message": "客服查訂單"})
     r = client.post(f"/api/projects/{project}/chat", json={"mode": "guided", "message": ""})
     assert r.json()["messages"][-1]["text"].endswith("上次是誰查訂單的？")
+
+
+def test_guided_reply_hides_update_summary(project):
+    """更新摘要是給模型看的內部說明，AI 引導只回問題本身。"""
+    r = client.post(f"/api/projects/{project}/chat", json={"mode": "guided", "message": "客服查訂單"})
+    assert r.json()["messages"][-1]["text"] == "上次是誰查訂單的？"
+
+
+def guided_target(flow: Flow, monkeypatch) -> str:
+    """跑 AI 引導的回覆，回傳這一輪要問的重點（從送給 AI 的提示中取出）。"""
+    prompts = []
+    monkeypatch.setattr(llm, "generate", lambda prompt, system=None: (prompts.append(prompt), ("問題", "fake"))[1])
+    state = {"mode": "guided", "context": {}, "flow": flow.model_dump(), "history": [], "gaps": find_gaps(flow)}
+    agent.respond(state)
+    return next(line for line in prompts[0].splitlines() if line.startswith("這一輪要問的重點"))
+
+
+def test_guided_asks_what_happens_next_before_details(monkeypatch):
+    """流程還沒走到結束時，先問最後一步之後接著做什麼，不先追問細節。"""
+    flow = Flow(nodes=[node("開始", "start"), node("查訂單")], edges=[FlowEdge(source="開始", target="查訂單")])
+    target = guided_target(flow, monkeypatch)
+    assert "「查訂單」做完之後" in target and "誰負責" not in target
+
+
+def test_guided_asks_details_once_flow_reaches_end(monkeypatch):
+    flow = Flow(
+        nodes=[node("開始", "start"), node("查訂單"), node("結束", "end")],
+        edges=[FlowEdge(source="開始", target="查訂單"), FlowEdge(source="查訂單", target="結束")],
+    )
+    target = guided_target(flow, monkeypatch)
+    assert "做完之後" not in target and "「查訂單」這一步" in target
+
+
+def test_guided_asks_other_branch_not_how_to_decide(monkeypatch):
+    """判斷只有一條路時，要問「另一種情況怎麼辦」；若問成「怎麼判斷」，企業回答了缺口也補不上，會一直重問。"""
+    flow = Flow(
+        nodes=[
+            node("開始", "start"),
+            node("確認條件", "decision", role="主管", condition="有沒有超過 7 天"),
+            node("通知客戶", role="客服", data="訂單"),
+            node("結束", "end"),
+        ],
+        edges=[
+            FlowEdge(source="開始", target="確認條件"),
+            FlowEdge(source="確認條件", target="通知客戶", label="符合條件"),
+            FlowEdge(source="通知客戶", target="結束"),
+        ],
+    )
+    target = guided_target(flow, monkeypatch)
+    assert "「符合條件」" in target and "另一種情況" in target and "不要再問怎麼判斷" in target
 
 
 def test_ai_failure_leaves_flow_unchanged(project, monkeypatch):

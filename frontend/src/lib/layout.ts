@@ -2,7 +2,7 @@ import dagre from "@dagrejs/dagre";
 import type { Flow } from "./types";
 
 export const NODE_W = 220;
-export const NODE_H = 84; // 實際卡片高度（三行文字）
+export const NODE_H = 92; // 實際卡片高度（兩行名稱＋負責人）
 export const DIAMOND_H = 150; // 判斷節點（菱形）的高度
 const BRANCH_GAP = 90; // 分支與主線之間的水平間距
 
@@ -31,20 +31,32 @@ export function autoLayout(flow: Flow, height = NODE_H): Flow {
 
   // dagre 會替跨越多層的連線預留繞道，但流程圖畫線時直接走直線，
   // 若分支節點離主線太近，主線的連線會穿過分支節點。把太近的分支推到主線旁邊。
+  // 同一側的分支節點一起平移同樣的距離，彼此的相對位置不變，才不會被推到同一個位置疊在一起。
   const main = mainPath(flow);
   const mainXs = [...main].map((id) => g.node(id).x);
-  const shiftX = (x: number) => {
-    if (!mainXs.length) return x;
+  const side = new Map<string, "left" | "right">();
+  let left = 0;
+  let right = 0;
+  for (const n of flow.nodes) {
+    if (main.has(n.id) || !mainXs.length) continue;
+    const x = g.node(n.id).x;
     const mx = mainXs.reduce((a, b) => (Math.abs(b - x) < Math.abs(a - x) ? b : a));
-    if (Math.abs(x - mx) >= NODE_W + BRANCH_GAP) return x;
-    return x <= mx ? mx - NODE_W - BRANCH_GAP : mx + NODE_W + BRANCH_GAP;
-  };
+    if (x <= mx) {
+      side.set(n.id, "left");
+      left = Math.min(left, mx - NODE_W - BRANCH_GAP - x);
+    } else {
+      side.set(n.id, "right");
+      right = Math.max(right, mx + NODE_W + BRANCH_GAP - x);
+    }
+  }
+  const shift = { left, right };
 
   return {
     ...flow,
     nodes: flow.nodes.map((n) => {
       const p = g.node(n.id);
-      const x = main.has(n.id) ? p.x : shiftX(p.x);
+      const s = side.get(n.id);
+      const x = s ? p.x + shift[s] : p.x;
       return { ...n, x: x - NODE_W / 2, y: p.y - h(n.kind) / 2 };
     }),
   };
