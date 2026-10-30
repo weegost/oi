@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import ProjectHeader from "@/components/ProjectHeader";
+import ReportSummary from "@/components/report/ReportSummary";
 import { API_BASE, apiGet, apiSend } from "@/lib/api";
 import type { Project, ReportData } from "@/lib/types";
 
@@ -104,109 +105,120 @@ export default function ReportWorkspace() {
         </div>
         <h1 className="mt-6 text-2xl font-bold text-slate-900">{report.title}</h1>
 
-        <Section title="1. 專案概要">
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[8rem_1fr]">
-            <Row label="專案名稱" value={o.project} />
-            <Row
-              label="企業"
-              value={o.has_tax_id ? `${o.company}（${o.is_demo ? "案例代碼" : "統一編號"} ${o.tax_id}）` : o.company}
+        <ReportSummary report={report} />
+
+        {/* 完整內容預設收起，重點在上面；列印時會自動展開 */}
+        <details data-print-open className="group/full mt-10 border-t border-slate-200 pt-4">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-slate-700 print:hidden [&::-webkit-details-marker]:hidden">
+            <ChevronDown aria-hidden className="h-4 w-4 transition-transform group-open/full:rotate-180" />
+            完整報告內容
+            <span className="text-sm font-normal text-slate-500">（專案概要、流程表、資料、權限、風險）</span>
+          </summary>
+
+          <Section title="1. 專案概要">
+            <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[8rem_1fr]">
+              <Row label="專案名稱" value={o.project} />
+              <Row
+                label="企業"
+                value={o.has_tax_id ? `${o.company}（${o.is_demo ? "案例代碼" : "統一編號"} ${o.tax_id}）` : o.company}
+              />
+              <Row label="產業" value={o.industry} />
+              <Row label="產出日期" value={report.generated_on} />
+              <Row label="規模" value={`${o.stats.steps} 個工作步驟，其中 ${o.stats.ai_steps} 步規劃 AI 介入`} />
+              {o.documents.length > 0 && <Row label="參考的企業文件" value={o.documents.join("、")} />}
+            </dl>
+          </Section>
+
+          <Section title="2. 專案摘要">
+            <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[8rem_1fr]">
+              <Row label="想改善的工作" value={o.work} />
+              <Row label="目前問題" value={o.problem} />
+            </dl>
+            {report.ai_summary && (
+              <div className="mt-4 rounded-lg bg-slate-50 p-4">
+                <p className="mb-1 text-xs text-slate-500">AI 摘要（AI 依草案內容撰寫，請企業確認）</p>
+                <p className="whitespace-pre-wrap">{report.ai_summary}</p>
+              </div>
+            )}
+          </Section>
+
+          <Section title="3. 人力與 AI 分配">
+            <Table
+              head={["步驟", "分工方式", "AI 負責", "人員負責"]}
+              rows={report.allocations.map((a) => [
+                a.step,
+                a.mode,
+                a.ai_does,
+                a.human_does || (a.mode === "人工執行" ? `由${a.role || "負責人"}處理` : ""),
+              ])}
             />
-            <Row label="產業" value={o.industry} />
-            <Row label="產出日期" value={report.generated_on} />
-            <Row label="規模" value={`${o.stats.steps} 個工作步驟，其中 ${o.stats.ai_steps} 步規劃 AI 介入`} />
-            {o.documents.length > 0 && <Row label="參考的企業文件" value={o.documents.join("、")} />}
-          </dl>
-        </Section>
+            {report.handoffs.length > 0 && (
+              <Collapsible title="需轉由人工處理的情況" count={report.handoffs.length}>
+                <List items={report.handoffs} />
+              </Collapsible>
+            )}
+          </Section>
 
-        <Section title="2. 專案摘要">
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[8rem_1fr]">
-            <Row label="想改善的工作" value={o.work} />
-            <Row label="目前問題" value={o.problem} />
-          </dl>
-          {report.ai_summary && (
-            <div className="mt-4 rounded-lg bg-slate-50 p-4">
-              <p className="mb-1 text-xs text-slate-500">AI 摘要（AI 依草案內容撰寫，請企業確認）</p>
-              <p className="whitespace-pre-wrap">{report.ai_summary}</p>
-            </div>
-          )}
-        </Section>
+          <Section title="4. 現行工作流程">
+            <Table
+              head={["#", "步驟", "類型", "負責角色", "使用系統", "需要的資料", "確認"]}
+              rows={report.steps.map((s, i) => [
+                String(i + 1),
+                s.title,
+                KIND_LABEL[s.kind] ?? s.kind,
+                s.role,
+                s.system,
+                s.data,
+                s.status,
+              ])}
+            />
+          </Section>
 
-        <Section title="3. 人力與 AI 分配">
-          <Table
-            head={["步驟", "分工方式", "AI 負責", "人員負責"]}
-            rows={report.allocations.map((a) => [
-              a.step,
-              a.mode,
-              a.ai_does,
-              a.human_does || (a.mode === "人工執行" ? `由${a.role || "負責人"}處理` : ""),
-            ])}
-          />
-          {report.handoffs.length > 0 && (
-            <Collapsible title="需轉由人工處理的情況" count={report.handoffs.length}>
-              <List items={report.handoffs} />
-            </Collapsible>
-          )}
-        </Section>
+          <Section title="5. AI 所需資料">
+            <List items={report.data} empty="尚無 AI 分工" />
+            {report.systems.length > 0 && (
+              <p className="mt-2 text-sm">
+                <span className="text-slate-500">需介接的系統：</span>
+                {report.systems.join("、")}
+              </p>
+            )}
+          </Section>
 
-        <Section title="4. 現行工作流程">
-          <Table
-            head={["#", "步驟", "類型", "負責角色", "使用系統", "需要的資料", "確認"]}
-            rows={report.steps.map((s, i) => [
-              String(i + 1),
-              s.title,
-              KIND_LABEL[s.kind] ?? s.kind,
-              s.role,
-              s.system,
-              s.data,
-              s.status,
-            ])}
-          />
-        </Section>
+          <Section title="6. AI 操作權限">
+            <List items={report.permissions} empty="尚無 AI 分工" />
+          </Section>
 
-        <Section title="5. AI 所需資料">
-          <List items={report.data} empty="尚無 AI 分工" />
-          {report.systems.length > 0 && (
-            <p className="mt-2 text-sm">
-              <span className="text-slate-500">需介接的系統：</span>
-              {report.systems.join("、")}
-            </p>
-          )}
-        </Section>
-
-        <Section title="6. AI 操作權限">
-          <List items={report.permissions} empty="尚無 AI 分工" />
-        </Section>
-
-        <Section title="7. 主要風險">
-          {stepRisks.length > 0 && (
-            <>
-              <h3 className="font-medium text-slate-900">各步驟的風險</h3>
-              <List items={stepRisks.map((a) => `${a.step}（${a.mode}）：${a.risk}`)} />
-            </>
-          )}
-          <h3 className="mt-4 font-medium text-slate-900">導入前需補足的條件</h3>
-          {!t.tested && <p className="text-sm text-amber-700">尚未執行情境沙盒測試，導入條件還沒有經過驗證。</p>}
-          {t.tested && report.gaps.length === 0 && <p className="text-sm text-emerald-700">情境測試中沒有發現缺口。</p>}
-          {report.gaps.length > 0 && (
-            <ul className="space-y-2 text-sm">
-              {report.gaps.map((g, i) => (
-                <li key={i}>
-                  <span className="mr-1 rounded bg-red-50 px-1.5 text-xs text-red-700">{g.type}</span>
-                  {g.issue}
-                  <span className="block text-slate-500">
-                    建議：{g.action}（影響 {g.cases.length} 個測試案例）
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {pending.length > 0 && (
-            <>
-              <h3 className="mt-4 font-medium text-slate-900">尚待確認</h3>
-              <List items={pending} />
-            </>
-          )}
-        </Section>
+          <Section title="7. 主要風險">
+            {stepRisks.length > 0 && (
+              <>
+                <h3 className="font-medium text-slate-900">各步驟的風險</h3>
+                <List items={stepRisks.map((a) => `${a.step}（${a.mode}）：${a.risk}`)} />
+              </>
+            )}
+            <h3 className="mt-4 font-medium text-slate-900">導入前需補足的條件</h3>
+            {!t.tested && <p className="text-sm text-amber-700">尚未執行情境沙盒測試，導入條件還沒有經過驗證。</p>}
+            {t.tested && report.gaps.length === 0 && <p className="text-sm text-emerald-700">情境測試中沒有發現缺口。</p>}
+            {report.gaps.length > 0 && (
+              <ul className="space-y-2 text-sm">
+                {report.gaps.map((g, i) => (
+                  <li key={i}>
+                    <span className="mr-1 rounded bg-red-50 px-1.5 text-xs text-red-700">{g.type}</span>
+                    {g.issue}
+                    <span className="block text-slate-500">
+                      建議：{g.action}（影響 {g.cases.length} 個測試案例）
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {pending.length > 0 && (
+              <>
+                <h3 className="mt-4 font-medium text-slate-900">尚待確認</h3>
+                <List items={pending} />
+              </>
+            )}
+          </Section>
+        </details>
 
         {/* 頁尾：免責聲明 */}
         <p className="mt-10 border-t border-slate-200 pt-4 text-xs leading-relaxed text-slate-500">{report.disclaimer}</p>

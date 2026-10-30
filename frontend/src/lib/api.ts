@@ -9,7 +9,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // 連不到伺服器時瀏覽器只會丟出「Failed to fetch」，改成看得懂的說明
     throw new Error(`無法連線到後端（${API_BASE}），請確認後端已經啟動。`);
   }
-  const body = await res.json();
+  const body = res.status === 204 ? null : await res.json(); // 204（例如刪除成功）沒有內容
   if (!res.ok) throw new Error(body?.detail ?? `API 錯誤（${res.status}）`);
   return body as T;
 }

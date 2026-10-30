@@ -81,6 +81,56 @@ def test_explore_saves_exploration_and_keeps_chosen_mode(demo_project, monkeypat
     assert alloc["exploration"]["recommended"] == "assist"
 
 
+def test_explore_keeps_choices_made_while_ai_was_running(demo_project, monkeypatch):
+    """分析一步要幾十秒，期間企業在別的步驟選的分工不能被分析結果蓋掉。"""
+
+    def slow_explore(*a, **k):
+        # AI 還在分析時，企業已在另一步選好分工（直接寫進資料庫模擬另一個請求）
+        with engine.begin() as conn:
+            conn.execute(
+                text("update projects set allocations = allocations || cast(:a as jsonb) where id = :id"),
+                {"a": '{"notify": {"mode": "auto"}}', "id": demo_project},
+            )
+        return exploration("assist")
+
+    monkeypatch.setattr(llm, "generate_json", slow_explore)
+    allocs = client.post(f"/api/projects/{demo_project}/nodes/lookup/explore").json()["allocations"]
+    assert allocs["notify"]["mode"] == "auto"
+    assert allocs["lookup"]["exploration"]["recommended"] == "assist"
+
+
+def task_ids(pid):
+    flow = client.get(f"/api/projects/{pid}").json()["flow"]
+    return [n["id"] for n in flow["nodes"] if n["kind"] not in ("start", "end")]
+
+
+def test_explore_all_analyzes_every_step_in_one_request(demo_project, monkeypatch):
+    calls = []
+    monkeypatch.setattr(llm, "generate_json", lambda *a, **k: (calls.append(1), exploration("assist"))[1])
+    client.put(f"/api/projects/{demo_project}/allocations/lookup", json={"mode": "review"})
+    allocs = client.post(f"/api/projects/{demo_project}/explore").json()["allocations"]
+    assert all(allocs[i]["exploration"] for i in task_ids(demo_project))
+    assert len(calls) == len(task_ids(demo_project))
+    assert allocs["lookup"]["mode"] == "review"  # 先選好的分工不被分析結果蓋掉
+    # 已分析過的步驟不再重送 AI
+    client.post(f"/api/projects/{demo_project}/explore")
+    assert len(calls) == len(task_ids(demo_project))
+
+
+def test_explore_all_keeps_finished_steps_when_one_fails(demo_project, monkeypatch):
+    def flaky(prompt, *a, **k):
+        if "「查詢訂單資料」" in prompt:
+            raise RuntimeError("503")
+        return exploration("assist")
+
+    monkeypatch.setattr(llm, "generate_json", flaky)
+    r = client.post(f"/api/projects/{demo_project}/explore")
+    assert r.status_code == 502 and "查詢訂單資料" in r.json()["detail"]
+    allocs = client.get(f"/api/projects/{demo_project}").json()["allocations"]
+    assert "lookup" not in allocs or not allocs["lookup"].get("exploration")
+    assert sum(1 for i in task_ids(demo_project) if allocs.get(i, {}).get("exploration")) == len(task_ids(demo_project)) - 1
+
+
 def test_cannot_allocate_start_or_unknown_node(demo_project):
     assert client.put(f"/api/projects/{demo_project}/allocations/start", json={"mode": "auto"}).status_code == 404
     assert client.put(f"/api/projects/{demo_project}/allocations/nope", json={"mode": "auto"}).status_code == 404

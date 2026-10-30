@@ -19,7 +19,10 @@ export default function GapHint({ gaps, onSelect }: { gaps: Gap[]; onSelect: (s:
             尚待補充 {gaps.length} 項
             <ChevronDown aria-hidden className="ml-auto h-4 w-4 transition-transform group-open:rotate-180" />
           </summary>
-          <ul className="max-h-64 space-y-1 overflow-y-auto border-t border-amber-200 px-3 py-2">
+          <p className="border-t border-amber-200 px-3 pt-2 text-xs text-amber-800">
+            全部補完才能進下一步。可以回答左邊 AI 的問題，或點下面的項目自己填。
+          </p>
+          <ul className="max-h-64 space-y-1 overflow-y-auto px-3 py-2">
             {gaps.map((g, i) => (
               <li key={i}>
                 {g.node_id ? (

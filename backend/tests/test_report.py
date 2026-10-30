@@ -54,6 +54,7 @@ def test_report_uses_chosen_mode_details(project):
     r = report(project)
     lookup = next(a for a in r["allocations"] if a["step"] == "查詢訂單資料")
     assert lookup["mode"] == "AI 輔助" and lookup["ai_does"] == "assist-AI"
+    assert lookup["handoff"] == ["查無訂單時轉客服"]  # 每一步自己的交給人情況，重點區拿來當風險對策
     assert "訂單編號" in r["data"]
     assert any("讀取訂單" in p for p in r["permissions"])
 
@@ -102,11 +103,34 @@ def test_docx_download_opens_in_word(project):
     assert section.footer.paragraphs[0].text.startswith("免責聲明")
 
 
+def fake_brief(steps: list[str], extra: str = ""):
+    """重點區短句的 AI 替身；extra 模擬 AI 多寫了草案裡沒有的步驟。"""
+
+    def generate_json(prompt, schema, system=None):
+        ai = [{"step": s, "text": f"{s}的短句"} for s in steps + ([extra] if extra else [])]
+        return schema.model_validate({"ai": ai, "human": "主管負責例外。"})
+
+    return generate_json
+
+
 def test_ai_summary_is_saved_and_shown(project, monkeypatch):
     monkeypatch.setattr(llm, "generate", lambda prompt, system=None: ("這是摘要。", "fake"))
+    monkeypatch.setattr(llm, "generate_json", fake_brief([]))
     r = client.post(f"/api/projects/{project}/report/summary").json()
     assert r["ai_summary"] == "這是摘要。"
     assert "AI 撰寫" in client.get(f"/api/projects/{project}/report/markdown").content.decode()
+
+
+def test_ai_brief_keeps_only_ai_steps(project, monkeypatch):
+    """短句只保留草案中有 AI 參與的步驟；AI 多寫的步驟會被丟掉。"""
+    r = client.get(f"/api/projects/{project}/report").json()
+    assert r["ai_brief"] is None  # 還沒請 AI 撰寫
+    ai_steps = [a["step"] for a in r["allocations"] if a["mode"] != "人工執行"]
+    monkeypatch.setattr(llm, "generate", lambda prompt, system=None: ("摘要。", "fake"))
+    monkeypatch.setattr(llm, "generate_json", fake_brief(ai_steps, extra="不存在的步驟"))
+    r = client.post(f"/api/projects/{project}/report/summary").json()
+    assert [s["step"] for s in r["ai_brief"]["ai"]] == ai_steps
+    assert r["ai_brief"]["human"] == "主管負責例外。"
 
 
 @pytest.mark.parametrize("company_name, shown", [("阿明電器行", "阿明電器行"), ("", "我的公司")])

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import AccountMenu from "@/components/AccountMenu";
-import BrandMark from "@/components/BrandMark";
+import BrandLink from "@/components/BrandLink";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAccount } from "@/lib/account";
 import { apiGet } from "@/lib/api";
@@ -14,6 +14,7 @@ type ProjectSummary = {
   name: string;
   work: string;
   company_name: string;
+  workspace_name: string | null;
   steps: number;
   progress: number; // 0–4：做到第幾個階段
   updated_at: string;
@@ -36,9 +37,7 @@ export default function MyProjectsPage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" aria-label="回首頁" className="rounded-lg">
-          <BrandMark />
-        </Link>
+        <BrandLink />
         <div className="flex items-center gap-2">
           <AccountMenu />
           <ThemeToggle />
@@ -48,10 +47,10 @@ export default function MyProjectsPage() {
       <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">我的專案</h1>
-          {account && <p className="mt-1 text-sm text-slate-600">{account.display_name || account.username} 建立過的分析</p>}
+          {account && <p className="mt-1 text-sm text-slate-600">你建立的，以及所屬工作區共用的分析</p>}
         </div>
         <Link
-          href="/"
+          href="/start"
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700"
         >
           <Plus aria-hidden className="h-4 w-4" />
@@ -85,7 +84,10 @@ export default function MyProjectsPage() {
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs text-slate-500">{p.company_name}</p>
+                    <p className="text-xs text-slate-500">
+                      {p.company_name}
+                      {p.workspace_name && ` · ${p.workspace_name} 工作區`}
+                    </p>
                     <h2 className="truncate text-lg font-semibold text-slate-900">{p.name}</h2>
                     {p.work && <p className="mt-0.5 text-sm text-slate-600">{p.work}</p>}
                   </div>

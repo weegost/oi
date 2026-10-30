@@ -7,8 +7,16 @@ const STAGES = [
   { label: "需求草案產出", path: "/report" },
 ];
 
-// 有 projectId 時，已開放的階段可以點擊切換
-export default function StageNav({ current, projectId }: { current: number; projectId?: number }) {
+// 有 projectId 時，已開放的階段可以點擊切換；lockAhead 時目前階段之後的都不能點
+export default function StageNav({
+  current,
+  projectId,
+  lockAhead,
+}: {
+  current: number;
+  projectId?: number;
+  lockAhead?: boolean;
+}) {
   return (
     <ol className="flex flex-wrap gap-2 text-sm">
       {STAGES.map(({ label, path }, i) => {
@@ -28,7 +36,7 @@ export default function StageNav({ current, projectId }: { current: number; proj
         );
         return (
           <li key={label}>
-            {projectId && path !== null && i !== current ? (
+            {projectId && path !== null && i !== current && !(lockAhead && i > current) ? (
               <Link href={`/projects/${projectId}${path}`} className={cls + " hover:border-brand-400"}>
                 {content}
               </Link>

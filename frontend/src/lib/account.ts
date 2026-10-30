@@ -42,8 +42,8 @@ export async function login(username: string, password: string) {
   set(await apiSend<Account>("POST", "/api/auth/login", { username, password }));
 }
 
-export async function register(username: string, password: string, displayName: string) {
-  set(await apiSend<Account>("POST", "/api/auth/register", { username, password, display_name: displayName }));
+export async function register(email: string, password: string, displayName: string) {
+  set(await apiSend<Account>("POST", "/api/auth/register", { email, password, display_name: displayName }));
 }
 
 export async function logout() {

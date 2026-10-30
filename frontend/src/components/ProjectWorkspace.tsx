@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, LayoutGrid, PanelLeftClose, PanelLeftOpen, Plus, X } from "lucide-react";
 import DocumentsDrawer from "@/components/docs/DocumentsDrawer";
-import ChatPanel, { type Mode } from "@/components/flow/ChatPanel";
+import ChatPanel from "@/components/flow/ChatPanel";
 import DetailPanel from "@/components/flow/DetailPanel";
 import FlowCanvas, { type Selection } from "@/components/flow/FlowCanvas";
 import GapHint from "@/components/flow/GapHint";
@@ -22,8 +22,9 @@ export default function ProjectWorkspace() {
   const [project, setProject] = useState<Project | null>(null);
   const [flow, setFlow] = useState<Flow>({ nodes: [], edges: [] });
   const [selection, setSelection] = useState<Selection>(null);
-  const [mode, setMode] = useState<Mode>("direct");
   const [busy, setBusy] = useState(false);
+  // AI 剛改到的步驟，在流程圖上標示幾秒，讓人看得出對話後哪裡變了
+  const [updated, setUpdated] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>("saved");
   const [chatOpen, setChatOpen] = useState(true);
@@ -32,6 +33,8 @@ export default function ProjectWorkspace() {
   const [docsOpen, setDocsOpen] = useState(false);
   // 版本號：每次本地編輯 +1，用來判斷自動儲存期間是否又有新的編輯
   const edits = useRef(0);
+  // 新專案只請 AI 開場提問一次（開發模式下 effect 會執行兩次）
+  const opened = useRef(false);
 
   const gaps = useMemo(() => findGaps(flow), [flow]);
 
@@ -72,6 +75,13 @@ export default function ProjectWorkspace() {
       .catch(() => {}); // 文件清單載入失敗不影響流程建模
   }, [taxId]);
 
+  // 「剛更新」標示 6 秒後自動消失
+  useEffect(() => {
+    if (!updated.length) return;
+    const t = setTimeout(() => setUpdated([]), 6000);
+    return () => clearTimeout(t);
+  }, [updated]);
+
   // 編輯後 1 秒自動儲存
   useEffect(() => {
     if (save !== "dirty") return;
@@ -85,16 +95,20 @@ export default function ProjectWorkspace() {
     setSave("dirty");
   };
 
-  const chat = async (nextMode: Mode, message: string) => {
+  // 一律用 AI 引導：企業說的話（一句或一大段）都會先整理進流程，再追問一個還缺的地方
+  const chat = async (message: string) => {
     setBusy(true);
     setError(null);
     if (message) {
       // 先讓使用者看到自己的訊息
-      setProject((p) => p && { ...p, messages: [...p.messages, { role: "user", mode: nextMode, text: message }] });
+      setProject((p) => p && { ...p, messages: [...p.messages, { role: "user", mode: "guided", text: message }] });
     }
     try {
       if (save !== "saved") await persist(flow); // Agent 要看到企業剛剛的手動修改
-      applyServer(await apiSend<Project>("POST", `/api/projects/${id}/chat`, { mode: nextMode, message }));
+      const before = flow;
+      const p = await apiSend<Project>("POST", `/api/projects/${id}/chat`, { mode: "guided", message });
+      applyServer(p);
+      setUpdated(changedNodeIds(before, p.flow));
     } catch (e) {
       setError(e instanceof Error ? e.message : "AI 暫時無法回應");
       // 移除畫面上先顯示的使用者訊息；後端也連不上時保留目前畫面，錯誤訊息已顯示
@@ -106,13 +120,15 @@ export default function ProjectWorkspace() {
     }
   };
 
-  const switchMode = (m: Mode) => {
-    if (m === mode || busy) return;
-    setMode(m);
-    // 切到 AI 引導時，還有缺口（或流程是空的）才請 Agent 主動提問；
-    // 流程已完整時不再呼叫，否則每次切換都會重複一句「流程資訊已大致完整」
-    if (m === "guided" && (flow.nodes.length === 0 || gaps.length > 0)) chat("guided", "");
-  };
+  // 剛建立、還沒有任何對話與流程的專案：AI 先開口問第一題，使用者不用想從哪裡說起
+  const fresh = project !== null && project.messages.length === 0 && project.flow.nodes.length === 0;
+  useEffect(() => {
+    if (!fresh || opened.current) return;
+    opened.current = true;
+    chat("");
+    // chat 每次 render 都是新函式，這裡只在專案載入後判斷一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fresh]);
 
   const addNode = () => {
     const n: FlowNode = {
@@ -144,7 +160,7 @@ export default function ProjectWorkspace() {
 
   return (
     <main className="flex h-screen flex-col">
-      <ProjectHeader project={project} stage={0} />
+      <ProjectHeader project={project} stage={0} lockAhead={!tasks || gaps.length > 0} />
 
       <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 text-sm">
         <button
@@ -186,15 +202,16 @@ export default function ProjectWorkspace() {
         <span className="ml-auto text-xs text-slate-400">
           {{ saved: "已儲存", dirty: "編輯中…", saving: "儲存中…", error: "儲存失敗，請檢查後端連線" }[save]}
         </span>
+        {/* 尚待補充的項目全部補完，才能進入下一步 */}
         <button
-          disabled={!tasks}
+          disabled={!tasks || gaps.length > 0}
           onClick={async () => {
             if (save !== "saved") await persist(flow); // 離開前先存好手動修改
             router.push(`/projects/${id}/allocate`);
           }}
           className="rounded-md bg-brand-600 px-3 py-1 font-medium text-white hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-500"
         >
-          下一步：AI 介入探索 →
+          {tasks && gaps.length > 0 ? `還有 ${gaps.length} 項待補，補完才能下一步` : "下一步：AI 介入探索 →"}
         </button>
       </div>
 
@@ -203,13 +220,7 @@ export default function ProjectWorkspace() {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {chatOpen && (
           <aside className="h-80 shrink-0 border-b border-slate-200 bg-white lg:h-auto lg:w-80 lg:border-r lg:border-b-0">
-            <ChatPanel
-              messages={project.messages}
-              mode={mode}
-              busy={busy}
-              onModeChange={switchMode}
-              onSend={(text) => chat(mode, text)}
-            />
+            <ChatPanel messages={project.messages} busy={busy} onSend={chat} />
           </aside>
         )}
         <section className="relative min-h-[420px] flex-1 bg-slate-50">
@@ -222,7 +233,7 @@ export default function ProjectWorkspace() {
           )}
           <FlowCanvas
             flow={flow}
-            gaps={gaps}
+            highlight={updated}
             selection={selection}
             onChange={edit}
             onSelect={setSelection}
@@ -252,4 +263,17 @@ export default function ProjectWorkspace() {
       )}
     </main>
   );
+}
+
+const COMPARED = ["kind", "title", "role", "system", "data", "condition", "exceptions", "output", "description"] as const;
+
+/** AI 這次新增或改了內容的步驟（位置變動不算） */
+function changedNodeIds(before: Flow, after: Flow): string[] {
+  const old = new Map(before.nodes.map((n) => [n.id, n]));
+  return after.nodes
+    .filter((n) => {
+      const o = old.get(n.id);
+      return !o || COMPARED.some((f) => (o[f] ?? "") !== (n[f] ?? ""));
+    })
+    .map((n) => n.id);
 }

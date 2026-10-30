@@ -1,8 +1,9 @@
-"""帳號與登入：一家公司共用一個帳號，登入後建立的專案會保留，之後可在「我的專案」重新查看。
+"""帳號與登入：每個人用 Email 註冊個人帳號，再建立或加入公司工作區，專案由工作區成員共用。
 
 - 密碼以 scrypt（Python 內建）加鹽雜湊後儲存，不存明碼。
 - 登入狀態放在 httpOnly cookie，前端 JavaScript 讀不到；下載 Word 等直接連結也會自動帶上。
 - 不登入也能使用系統，只是專案不屬於任何帳號，不會出現在專案列表。
+- 舊版「一家公司共用一個帳號」的帳號仍可用原本的帳號名稱登入。
 """
 
 import hashlib
@@ -16,11 +17,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Account, AuthToken, Project
+from .models import Account, AuthToken, Project, WorkspaceMember
 
 COOKIE = "bizpilot_session"
 COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 天內不用重新登入
-USERNAME_RE = re.compile(r"[A-Za-z0-9_.@-]{3,50}")
+EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+MIN_PASSWORD = 8
 
 
 def hash_password(password: str) -> str:
@@ -44,16 +46,41 @@ def optional_account(request: Request, db: Session = Depends(get_db)) -> Account
     return db.get(Account, row.account_id) if row else None
 
 
+def require_account(account: Account | None) -> Account:
+    if not account:
+        raise HTTPException(401, "請先登入。")
+    return account
+
+
+def member_role(db: Session, workspace_id: int, account_id: int) -> str | None:
+    """帳號在工作區的身分（ADMIN／MEMBER）；不是成員回傳 None。"""
+    return db.scalar(
+        select(WorkspaceMember.role).where(
+            WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.account_id == account_id
+        )
+    )
+
+
+def can_access_project(db: Session, account: Account | None, p: Project) -> bool:
+    """未登入建立、且不屬於任何工作區的專案不設限；其餘只有建立者與所屬工作區的成員能看。"""
+    if p.account_id is None and p.workspace_id is None:
+        return True
+    if not account:
+        return False
+    if p.account_id == account.id:
+        return True
+    return p.workspace_id is not None and member_role(db, p.workspace_id, account.id) is not None
+
+
 def check_project_access(request: Request, db: Session = Depends(get_db)):
-    """網址中有 project_id 時：屬於某帳號的專案只有該帳號能看，其他人一律當作不存在。"""
+    """網址中有 project_id 時：有主人的專案只有建立者與工作區成員能看，其他人一律當作不存在。"""
     project_id = request.path_params.get("project_id")
     if project_id is None:
         return
     p = db.get(Project, int(project_id))
-    if not p or p.account_id is None:
-        return  # 找不到交給各端點回 404；未登入建立的專案不設限
-    account = optional_account(request, db)
-    if not account or account.id != p.account_id:
+    if not p:
+        return  # 找不到交給各端點回 404
+    if not can_access_project(db, optional_account(request, db), p):
         raise HTTPException(404, "找不到這個專案。")
 
 
@@ -73,27 +100,29 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):
-    username: str
+    email: str
     password: str
     display_name: str = ""
 
 
 class LoginRequest(BaseModel):
-    username: str
+    username: str  # Email；舊版公司帳號則填原本的帳號名稱
     password: str
 
 
 @router.post("/register")
 def register(body: RegisterRequest, response: Response, db: Session = Depends(get_db)):
-    username = body.username.strip()
-    if not USERNAME_RE.fullmatch(username):
-        raise HTTPException(400, "帳號請用 3–50 個英文字母、數字或 _ . @ -。")
-    if len(body.password) < 6:
-        raise HTTPException(400, "密碼至少 6 個字。")
-    if db.scalar(select(Account.id).where(Account.username == username)):
-        raise HTTPException(400, "這個帳號已經有人使用，請換一個。")
+    email = body.email.strip().lower()
+    if not EMAIL_RE.fullmatch(email) or len(email) > 200:
+        raise HTTPException(400, "請輸入正確的電子郵件。")
+    if len(body.password) < MIN_PASSWORD:
+        raise HTTPException(400, f"密碼至少 {MIN_PASSWORD} 個字元。")
+    if not body.display_name.strip():
+        raise HTTPException(400, "請輸入顯示姓名。")
+    if db.scalar(select(Account.id).where(Account.username == email)):
+        raise HTTPException(400, "這個電子郵件已經註冊過，請直接登入。")
     account = Account(
-        username=username, password_hash=hash_password(body.password), display_name=body.display_name.strip()
+        username=email, password_hash=hash_password(body.password), display_name=body.display_name.strip()
     )
     db.add(account)
     db.flush()
@@ -102,7 +131,8 @@ def register(body: RegisterRequest, response: Response, db: Session = Depends(ge
 
 @router.post("/login")
 def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    account = db.scalar(select(Account).where(Account.username == body.username.strip()))
+    name = body.username.strip()
+    account = db.scalar(select(Account).where(Account.username.in_({name, name.lower()})))
     if not account or not verify_password(body.password, account.password_hash):
         raise HTTPException(400, "帳號或密碼不正確。")
     return _login(response, db, account)

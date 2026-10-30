@@ -77,9 +77,8 @@ def find_gaps(flow: Flow) -> list[dict]:
     for e in flow.edges:
         outgoing[e.source] = outgoing.get(e.source, 0) + 1
 
+    # 已確認的步驟一樣檢查：確認只代表企業同意這一步存在，缺的資訊仍要列出來
     for n in tasks:
-        if n.status == "confirmed":
-            continue  # 企業已確認的節點不再追問
         if n.id not in linked:
             add(n, "connection")
         if not n.role.strip() and n.kind != "wait":
